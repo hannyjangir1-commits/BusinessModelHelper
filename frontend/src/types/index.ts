@@ -236,8 +236,10 @@ export interface ValidationReportData {
 export interface ValidationReportResponse {
   id: string;
   project_id: string;
+  module_type?: string;
   version: number;
-  content: ValidationReportData;
+  content?: ValidationReportData;
+  content_json?: ValidationReportData;
   created_at: string;
   updated_at: string;
 }
@@ -262,31 +264,51 @@ export interface FinancialAssumptions {
   forecast_months: number;
 }
 
+export interface BreakEvenAnalysis {
+  contribution_margin_per_unit?: number;
+  contribution_margin_ratio?: number;
+  monthly_fixed_operating_costs?: number;
+  break_even_units_per_month?: number | null;
+  break_even_revenue_per_month?: number | null;
+  is_break_even_achievable?: boolean;
+}
+
 export interface SummaryMetrics {
-  break_even_units: number | string;
-  break_even_revenue: number | string;
-  contribution_margin_per_unit: number;
-  contribution_margin_ratio: number;
-  initial_capital_required: number;
-  runway_months: number;
-  total_revenue_forecast: number;
-  total_cogs_forecast: number;
-  total_gross_profit_forecast: number;
-  total_operating_expenses_forecast: number;
-  total_net_profit_forecast: number;
+  break_even_units?: number | string;
+  break_even_revenue?: number | string;
+  contribution_margin_per_unit?: number;
+  contribution_margin_ratio?: number;
+  initial_capital_required?: number;
+  recommended_startup_capital?: number;
+  runway_months?: number;
+  estimated_runway_months?: number;
+  total_revenue_forecast?: number;
+  total_revenue?: number;
+  total_cogs_forecast?: number;
+  total_gross_profit_forecast?: number;
+  gross_profit?: number;
+  total_operating_expenses_forecast?: number;
+  total_operating_expenses?: number;
+  total_net_profit_forecast?: number;
+  net_profit?: number;
 }
 
 export interface MonthlyProjectionItem {
   month: number;
   units_sold: number;
   revenue: number;
-  cogs: number;
+  cogs?: number;
+  total_variable_costs?: number;
+  direct_variable_costs?: number;
+  payment_fees?: number;
   gross_profit: number;
   operating_expenses: number;
-  net_profit_pre_tax: number;
-  estimated_tax: number;
+  net_profit_pre_tax?: number;
+  operating_profit?: number;
+  estimated_tax?: number;
+  tax_expense?: number;
   net_profit: number;
-  cash_inflows: number;
+  cash_inflows?: number;
   cash_outflows: number;
   net_cash_flow: number;
   opening_cash: number;
@@ -296,7 +318,9 @@ export interface MonthlyProjectionItem {
 export interface FinancialScenario {
   scenario_name: 'conservative' | 'expected' | 'optimistic';
   assumptions: FinancialAssumptions;
-  summary_metrics: SummaryMetrics;
+  summary_metrics?: SummaryMetrics;
+  summary?: SummaryMetrics;
+  break_even?: BreakEvenAnalysis;
 }
 
 export interface FinancialModelResponse {
@@ -307,6 +331,8 @@ export interface FinancialModelResponse {
   forecast_months: number;
   assumptions: FinancialAssumptions;
   summary: SummaryMetrics;
+  summary_metrics?: SummaryMetrics;
+  break_even?: BreakEvenAnalysis;
   monthly_projections: MonthlyProjectionItem[];
   scenarios: Record<string, FinancialScenario>;
   created_at: string;

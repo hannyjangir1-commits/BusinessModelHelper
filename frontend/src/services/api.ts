@@ -317,15 +317,21 @@ export const api = {
     async save(projectId: string, assumptions: Partial<FinancialAssumptions>): Promise<FinancialModelResponse> {
       const res = await request<ApiResponse<FinancialModelResponse>>(`/api/projects/${projectId}/financial`, {
         method: 'POST',
-        body: JSON.stringify(assumptions),
+        body: JSON.stringify({
+          name: 'Base Financial Plan',
+          assumptions,
+        }),
       });
       return res.data!;
     },
 
-    async calculate(projectId: string, assumptions: Partial<FinancialAssumptions>): Promise<any> {
-      const res = await request<ApiResponse<any>>(`/api/projects/${projectId}/financial/calculate`, {
+    async calculate(projectId: string, assumptions: Partial<FinancialAssumptions>): Promise<FinancialModelResponse> {
+      const res = await request<ApiResponse<FinancialModelResponse>>(`/api/projects/${projectId}/financial/calculate`, {
         method: 'POST',
-        body: JSON.stringify(assumptions),
+        body: JSON.stringify({
+          assumptions,
+          include_scenarios: true,
+        }),
       });
       return res.data!;
     },

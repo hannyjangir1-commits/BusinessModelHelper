@@ -230,3 +230,109 @@ def test_financial_api_workflow(client):
     assert ver_resp.status_code == 200
     versions = ver_resp.json()["data"]
     assert len(versions) == 2
+
+
+def test_financial_schema_alias_and_percentage_normalization():
+    """Verify that frontend field names and decimal percentages are automatically converted."""
+    frontend_raw_dict = {
+        "currency": "USD",
+        "starting_cash": 20000.0,
+        "initial_equipment_costs": 4000.0,
+        "monthly_fixed_costs": 1500.0,
+        "monthly_salaries": 3500.0,
+        "monthly_marketing_budget": 800.0,
+        "selling_price": 50.0,
+        "variable_cost_per_unit": 10.0,
+        "initial_monthly_volume": 100,
+        "monthly_growth_rate": 0.12,  # 12% decimal
+        "payment_processing_rate": 0.029,  # 2.9% decimal
+        "tax_rate": 0.20,  # 20% decimal
+        "forecast_months": 12,
+    }
+
+    assumptions = FinancialAssumptions.model_validate(frontend_raw_dict)
+    assert assumptions.one_time_startup_costs == 4000.0
+    assert assumptions.monthly_fixed_expenses == 1500.0
+    assert assumptions.salaries_costs == 3500.0
+    assert assumptions.marketing_expenditure == 800.0
+    assert assumptions.expected_sales_volume == 100
+    assert assumptions.monthly_growth_rate_pct == 12.0
+    assert assumptions.payment_processing_pct == 2.9
+    assert assumptions.tax_rate_pct == 20.0
+
+
+def test_financial_unwrapped_calculate_and_save_api(client):
+    """Verify API handles unwrapped payloads and returns response fields required by UI."""
+    reg_resp = client.post(
+        "/api/auth/register",
+        json={
+            "username": "unwrapped_cfo",
+            "email": "unwrapped_cfo@example.com",
+            "password": "Password123!",
+            "confirm_password": "Password123!",
+            "display_name": "Unwrapped CFO",
+            "terms_accepted": True,
+            "privacy_acknowledged": True,
+        },
+    )
+    assert reg_resp.status_code == 201
+
+    # Create project
+    proj_resp = client.post(
+        "/api/projects",
+        json={
+            "name": "FinTech Startup",
+            "idea_description": "Payment app for global contractors",
+            "industry": "FinTech",
+        },
+    )
+    assert proj_resp.status_code == 201
+    proj_id = proj_resp.json()["data"]["id"]
+
+    # Calculate with flat/unwrapped payload and frontend field names
+    calc_resp = client.post(
+        f"/api/projects/{proj_id}/financial/calculate",
+        json={
+            "currency": "USD",
+            "starting_cash": 15000.0,
+            "monthly_fixed_costs": 2500.0,
+            "monthly_salaries": 4000.0,
+            "monthly_marketing_budget": 1000.0,
+            "selling_price": 80.0,
+            "variable_cost_per_unit": 20.0,
+            "initial_monthly_volume": 60,
+            "monthly_growth_rate": 0.08,
+            "tax_rate": 0.15,
+        },
+    )
+    assert calc_resp.status_code == 200
+    calc_data = calc_resp.json()["data"]
+    # Check that UI compatibility response fields are present
+    assert "summary_metrics" in calc_data
+    assert calc_data["summary_metrics"]["break_even_units"] is not None
+    assert calc_data["summary_metrics"]["initial_capital_required"] is not None
+    assert calc_data["summary_metrics"]["runway_months"] is not None
+    assert len(calc_data["monthly_projections"]) == 12
+    assert "cogs" in calc_data["monthly_projections"][0]
+
+    # Save with flat/unwrapped payload
+    save_resp = client.post(
+        f"/api/projects/{proj_id}/financial",
+        json={
+            "currency": "USD",
+            "starting_cash": 15000.0,
+            "monthly_fixed_costs": 2500.0,
+            "monthly_salaries": 4000.0,
+            "monthly_marketing_budget": 1000.0,
+            "selling_price": 80.0,
+            "variable_cost_per_unit": 20.0,
+            "initial_monthly_volume": 60,
+            "monthly_growth_rate": 0.08,
+        },
+    )
+    assert save_resp.status_code == 201
+    save_data = save_resp.json()["data"]
+    assert save_data["version"] == 1
+    assert "summary_metrics" in save_data
+
+

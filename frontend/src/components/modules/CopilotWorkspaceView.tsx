@@ -1,19 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
-  AlertCircle,
   Bot,
   Check,
-  CheckCircle2,
-  Clock,
-  CornerDownLeft,
   FileEdit,
   History,
-  MessageSquare,
   Send,
   Sparkles,
   User,
   X,
-  Zap,
 } from 'lucide-react';
 import { api } from '../../services/api';
 import {
@@ -24,6 +18,7 @@ import { Button } from '../ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Alert } from '../ui/Alert';
+import { MarkdownContent } from '../ui/MarkdownContent';
 
 interface CopilotWorkspaceViewProps {
   projectId: string;
@@ -76,7 +71,7 @@ export const CopilotWorkspaceView: React.FC<CopilotWorkspaceViewProps> = ({
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputQuery.trim()) return;
+    if (!inputQuery.trim() || isSending) return;
 
     const userText = inputQuery.trim();
     const userMsg: ChatMessage = {
@@ -259,15 +254,19 @@ export const CopilotWorkspaceView: React.FC<CopilotWorkspaceViewProps> = ({
                   </div>
                 )}
                 <div
-                  className={`max-w-[80%] rounded-2xl p-3.5 space-y-1 ${
+                  className={`max-w-[85%] rounded-2xl p-3.5 space-y-1 shadow-sm ${
                     msg.sender === 'user'
                       ? 'bg-indigo-600 text-white rounded-tr-none'
-                      : 'bg-slate-100 text-slate-800 rounded-tl-none'
+                      : 'bg-slate-50 text-slate-800 rounded-tl-none border border-slate-200/80'
                   }`}
                 >
-                  <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                  {msg.sender === 'copilot' ? (
+                    <MarkdownContent content={msg.text} />
+                  ) : (
+                    <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                  )}
                   <span
-                    className={`text-[9px] block text-right ${
+                    className={`text-[9px] block text-right pt-1 ${
                       msg.sender === 'user' ? 'text-indigo-200' : 'text-slate-400'
                     }`}
                   >
@@ -370,7 +369,7 @@ export const CopilotWorkspaceView: React.FC<CopilotWorkspaceViewProps> = ({
                 size="sm"
                 className="absolute right-1.5 top-1.5"
                 isLoading={isSending}
-                disabled={!inputQuery.trim()}
+                disabled={!inputQuery.trim() || isSending}
               >
                 <Send className="w-3.5 h-3.5" />
               </Button>

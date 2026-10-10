@@ -82,37 +82,54 @@ def test_validation_report_api_and_versioning(client, db):
     orig_client = validator_pipeline.GeminiAIClient
     validator_pipeline.GeminiAIClient = MockAIClient
     try:
-        gen_res = client.post(f"/api/projects/{proj_id}/validation/generate")
+        # 3a. Generate validation report using primary /validator/generate endpoint
+        gen_res = client.post(f"/api/projects/{proj_id}/validator/generate")
         assert gen_res.status_code == 201
         bp_data = gen_res.json()["data"]
         assert bp_data["version"] == 1
         assert bp_data["module_type"] == "validation_report"
         assert "swot_analysis" in bp_data["content_json"]
 
-        # 4. Fetch latest report
-        get_res = client.get(f"/api/projects/{proj_id}/validation")
+        # 4a. Fetch latest report via /validator
+        get_res = client.get(f"/api/projects/{proj_id}/validator")
         assert get_res.status_code == 200
         assert get_res.json()["data"]["version"] == 1
 
-        # 5. Generate version 2
+        # 4b. Fetch latest report via legacy alias /validation
+        get_res_alias = client.get(f"/api/projects/{proj_id}/validation")
+        assert get_res_alias.status_code == 200
+        assert get_res_alias.json()["data"]["version"] == 1
+
+        # 5. Generate version 2 via alias /validation/generate
         gen_res_2 = client.post(f"/api/projects/{proj_id}/validation/generate")
         assert gen_res_2.status_code == 201
         assert gen_res_2.json()["data"]["version"] == 2
 
-        # 6. List versions
-        ver_res = client.get(f"/api/projects/{proj_id}/validation/versions")
+        # 6. List versions via /validator/versions
+        ver_res = client.get(f"/api/projects/{proj_id}/validator/versions")
         assert ver_res.status_code == 200
         assert len(ver_res.json()["data"]) == 2
 
-        # 7. Edit latest report
+        # 7. Edit latest report via /validator
         current_content = get_res.json()["data"]["content_json"]
         current_content["overview"] = "Updated founder-refined validation overview."
         patch_res = client.patch(
-            f"/api/projects/{proj_id}/validation",
+            f"/api/projects/{proj_id}/validator",
             json={"content": current_content},
         )
         assert patch_res.status_code == 200
         assert patch_res.json()["data"]["content_json"]["overview"] == "Updated founder-refined validation overview."
+
+        # 8. Test unauthenticated request rejection
+        from fastapi.testclient import TestClient
+        from app.main import app
+        unauthed_client = TestClient(app)
+        unauthed_res = unauthed_client.post(f"/api/projects/{proj_id}/validator/generate")
+        assert unauthed_res.status_code in (401, 403)
+
+        # 9. Test nonexistent project ID returns 404
+        nonexistent_res = client.post("/api/projects/nonexistent-project-id-999/validator/generate")
+        assert nonexistent_res.status_code == 404
 
     finally:
         validator_pipeline.GeminiAIClient = orig_client

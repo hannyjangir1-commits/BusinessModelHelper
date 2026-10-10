@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
-  Clock,
-  ExternalLink,
   HelpCircle,
   Lightbulb,
   RefreshCw,
@@ -38,6 +36,7 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
   const [success, setSuccess] = useState<string | null>(null);
 
   const handleGenerate = async () => {
+    if (isGenerating) return;
     setIsGenerating(true);
     setError(null);
     setSuccess(null);
@@ -62,7 +61,7 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
     }
   };
 
-  const data: ValidationReportData | null = report?.content || null;
+  const data: ValidationReportData | null = report?.content_json || report?.content || null;
 
   if (!report || !data) {
     return (
@@ -80,10 +79,11 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
         <Button
           onClick={handleGenerate}
           isLoading={isGenerating}
+          disabled={isGenerating}
           leftIcon={<Sparkles className="w-4 h-4" />}
           className="w-full justify-center"
         >
-          Interrogate & Validate Business Idea
+          {isGenerating ? 'Interrogating Business Assumptions...' : 'Interrogate & Validate Business Idea'}
         </Button>
       </div>
     );
@@ -128,9 +128,10 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
             size="sm"
             onClick={handleGenerate}
             isLoading={isGenerating}
+            disabled={isGenerating}
             leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
           >
-            Regenerate
+            {isGenerating ? 'Regenerating...' : 'Regenerate'}
           </Button>
         </div>
       </div>

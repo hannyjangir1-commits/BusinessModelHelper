@@ -3,7 +3,7 @@
 import logging
 import random
 import time
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
@@ -45,16 +45,20 @@ class GeminiAIClient:
         self,
         system_instruction: str,
         user_prompt: str,
+        response_mime_type: Optional[str] = "application/json",
     ) -> Tuple[str, int, Optional[int], Optional[int]]:
         """Invoke Gemini model with exponential backoff and return (raw_text, latency_ms, input_tokens, output_tokens)."""
         client = self._get_client()
 
-        config = types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            response_mime_type="application/json",
-            temperature=0.4,
-            max_output_tokens=8192,
-        )
+        config_kwargs: Dict[str, Any] = {
+            "system_instruction": system_instruction,
+            "temperature": 0.4,
+            "max_output_tokens": 8192,
+        }
+        if response_mime_type:
+            config_kwargs["response_mime_type"] = response_mime_type
+
+        config = types.GenerateContentConfig(**config_kwargs)
 
         attempts = 0
         last_error: Optional[Exception] = None
@@ -155,6 +159,8 @@ class MockAIClient:
         self,
         system_instruction: str,
         user_prompt: str,
+        response_mime_type: Optional[str] = "application/json",
+        **kwargs: Any,
     ) -> Tuple[str, int, Optional[int], Optional[int]]:
         if self.should_fail:
             if self.fail_error:

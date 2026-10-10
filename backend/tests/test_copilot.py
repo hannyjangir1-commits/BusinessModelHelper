@@ -179,3 +179,32 @@ def test_copilot_propose_edit_and_accept_api(client):
 
     finally:
         copilot_service.GeminiAIClient = orig_client
+
+
+def test_copilot_answer_unpacking_markdown():
+    """Verify that _unpack_copilot_answer_to_markdown safely converts JSON, fences, and prose to clean Markdown."""
+    from app.services.copilot_service import _unpack_copilot_answer_to_markdown
+
+    # 1. Normal prose Markdown is preserved
+    prose = "## Strategic Direction\nFocus on solo developers with **high willingness to pay**."
+    assert _unpack_copilot_answer_to_markdown(prose) == prose
+
+    # 2. JSON wrapper object is unpacked
+    json_wrapped = '{"answer": "Focus on organic content marketing via technical case studies."}'
+    assert _unpack_copilot_answer_to_markdown(json_wrapped) == "Focus on organic content marketing via technical case studies."
+
+    # 3. Fenced JSON is stripped and unpacked
+    fenced = '```json\n{"message": "Your runway is currently estimated at 6.2 months."}\n```'
+    assert "Your runway is currently estimated at 6.2 months." in _unpack_copilot_answer_to_markdown(fenced)
+
+    # 4. Multi-key JSON dict is formatted into readable Markdown headings and bullet points
+    multi_key_json = '{"recommendations": ["Optimize CAC", "Launch waitlist"], "risk": "High market competition"}'
+    unpacked = _unpack_copilot_answer_to_markdown(multi_key_json)
+    assert "### Recommendations" in unpacked
+    assert "- Optimize CAC" in unpacked
+    assert "- Launch waitlist" in unpacked
+    assert "**Risk**: High market competition" in unpacked
+
+    # 5. Empty or whitespace returns helpful prompt
+    assert "reviewed your project context" in _unpack_copilot_answer_to_markdown("")
+

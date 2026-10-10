@@ -17,10 +17,11 @@ from app.schemas.validator import ValidationUpdateRequest
 from app.services.ai.validator_pipeline import generate_validation_report
 from app.services.project_service import get_user_project_by_id
 
-router = APIRouter(prefix="/projects/{project_id}/validation", tags=["Idea Validator"])
+router = APIRouter(tags=["Idea Validator"])
 
 
-@router.post("/generate", response_model=ApiResponse[BlueprintResponse], status_code=status.HTTP_201_CREATED)
+@router.post("/projects/{project_id}/validator/generate", response_model=ApiResponse[BlueprintResponse], status_code=status.HTTP_201_CREATED)
+@router.post("/projects/{project_id}/validation/generate", response_model=ApiResponse[BlueprintResponse], status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def generate_validator_report(
     project_id: str,
     current_user: User = Depends(get_current_user),
@@ -35,7 +36,8 @@ def generate_validator_report(
     return ApiResponse(data=BlueprintResponse.model_validate(blueprint), message=msg)
 
 
-@router.get("", response_model=ApiResponse[BlueprintResponse])
+@router.get("/projects/{project_id}/validator", response_model=ApiResponse[BlueprintResponse])
+@router.get("/projects/{project_id}/validation", response_model=ApiResponse[BlueprintResponse], include_in_schema=False)
 def get_latest_or_version_validation(
     project_id: str,
     version: Optional[int] = Query(None, description="Specific version number; defaults to latest"),
@@ -61,7 +63,8 @@ def get_latest_or_version_validation(
     return ApiResponse(data=BlueprintResponse.model_validate(blueprint))
 
 
-@router.get("/versions", response_model=ApiResponse[List[BlueprintVersionItem]])
+@router.get("/projects/{project_id}/validator/versions", response_model=ApiResponse[List[BlueprintVersionItem]])
+@router.get("/projects/{project_id}/validation/versions", response_model=ApiResponse[List[BlueprintVersionItem]], include_in_schema=False)
 def list_validation_versions(
     project_id: str,
     current_user: User = Depends(get_current_user),
@@ -82,7 +85,8 @@ def list_validation_versions(
     return ApiResponse(data=[BlueprintVersionItem.model_validate(b) for b in blueprints])
 
 
-@router.patch("", response_model=ApiResponse[BlueprintResponse])
+@router.patch("/projects/{project_id}/validator", response_model=ApiResponse[BlueprintResponse])
+@router.patch("/projects/{project_id}/validation", response_model=ApiResponse[BlueprintResponse], include_in_schema=False)
 def update_validation_report_content(
     project_id: str,
     update_data: ValidationUpdateRequest,

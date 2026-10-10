@@ -86,6 +86,58 @@ def build_copilot_context_summary(db: Session, project: Project) -> str:
     return "\n".join(lines)
 
 
+def _unpack_copilot_answer_to_markdown(raw_text: str) -> str:
+    """Safely convert any accidental JSON-encoded model output into readable Markdown."""
+    text = (raw_text or "").strip()
+    if not text:
+        return "I have reviewed your project context. Please let me know what specific questions or section improvements you would like to explore."
+
+    # Strip markdown json code fences if present
+    if text.startswith("```json") and text.endswith("```"):
+        text = text[7:-3].strip()
+    elif text.startswith("```") and text.endswith("```"):
+        text = text[3:-3].strip()
+
+    # Try to parse as JSON if it looks like JSON structure
+    if (text.startswith("{") and text.endswith("}")) or (text.startswith("[") and text.endswith("]")):
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                # Common conversational JSON wrapper keys
+                for key in ("answer", "response", "content", "message", "reply", "text", "summary"):
+                    if key in parsed and isinstance(parsed[key], str):
+                        base = parsed[key].strip()
+                        extras = [
+                            f"- **{k.replace('_', ' ').title()}**: {v}"
+                            for k, v in parsed.items()
+                            if k != key and not isinstance(v, (dict, list))
+                        ]
+                        if extras:
+                            return base + "\n\n### Key Considerations\n" + "\n".join(extras)
+                        return base
+
+                # If it's a structured dictionary without a primary text field, format into readable Markdown
+                md_blocks = []
+                for k, v in parsed.items():
+                    title = k.replace("_", " ").title()
+                    if isinstance(v, list):
+                        items_str = "\n".join(f"- {item}" for item in v)
+                        md_blocks.append(f"### {title}\n{items_str}")
+                    elif isinstance(v, dict):
+                        sub_items = "\n".join(f"- **{sub_k.replace('_', ' ').title()}**: {sub_v}" for sub_k, sub_v in v.items())
+                        md_blocks.append(f"### {title}\n{sub_items}")
+                    else:
+                        md_blocks.append(f"**{title}**: {v}")
+                if md_blocks:
+                    return "\n\n".join(md_blocks)
+            elif isinstance(parsed, list):
+                return "\n".join(f"- {item}" for item in parsed)
+        except Exception:
+            pass
+
+    return text
+
+
 def process_copilot_interaction(
     db: Session,
     user: User,
@@ -103,7 +155,10 @@ def process_copilot_interaction(
         system_instruction = (
             "You are an expert AI Business Architect Copilot and startup strategy partner. "
             "Answer the founder's question using the provided saved project context. "
-            "Be concise, actionable, and direct. "
+            "Respond directly in clear, readable, conversational Markdown format. "
+            "Use clear headings (##, ###), bulleted lists (-), bold terms (**term**), and concise paragraphs. "
+            "If providing numbers or comparisons, present them in clean Markdown tables or formatted bullet lists. "
+            "Do NOT output raw JSON or wrap your entire response in JSON code blocks. "
             "Ground your answer strictly in the provided project context without fabricating details. "
             "If asked for opinions or comparisons, provide balanced trade-offs. "
             "Do NOT propose or execute database updates in Q&A mode."
@@ -115,10 +170,12 @@ Saved Project Context:
 Founder Question:
 {req.query}
 """
-        raw_text, _, _, _ = ai_client.generate(system_instruction, user_prompt)
+        raw_text, _, _, _ = ai_client.generate(system_instruction, user_prompt, response_mime_type=None)
+        clean_answer = _unpack_copilot_answer_to_markdown(raw_text)
+
         return CopilotChatResponse(
             action_type="answer_question",
-            answer=raw_text.strip(),
+            answer=clean_answer,
         )
 
     # 2. CONTROLLED PROPOSE_EDIT
