@@ -1,0 +1,72 @@
+[
+  {
+    "id": "case-01-edtech-ai",
+    "name": "NeuroLearn Adaptive STEM",
+    "industry": "EdTech",
+    "business_stage": "validation",
+    "idea_description": "An adaptive online learning engine using AI cognitive models to personalize math and physics problem sets for high school students.",
+    "target_market": "North America",
+    "target_audience": "AP Physics and Calculus students, high school STEM teachers, homeschooling parents",
+    "budget_amount": 5000,
+    "budget_currency": "USD",
+    "team_size": "2-5",
+    "technical_preferences": "Python backend, React frontend, PostgreSQL",
+    "constraints": "FERPA student data compliance, low latency on dynamic assessments"
+  },
+  {
+    "id": "case-02-cleantech-logistics",
+    "name": "FleetZero Carbon Optimizer",
+    "industry": "CleanTech Logistics",
+    "business_stage": "mvp",
+    "idea_description": "SaaS route optimization software for regional trucking fleets to reduce diesel consumption and calculate verifiable Scope 1 carbon tax credits.",
+    "target_market": "European Union and United Kingdom",
+    "target_audience": "Logistics managers with 20 to 150 commercial vehicle fleets",
+    "budget_amount": 25000,
+    "budget_currency": "EUR",
+    "team_size": "5-10",
+    "technical_preferences": "Microservices or modular monolith, geospatial queries",
+    "constraints": "EU CSRD carbon accounting regulatory guidelines, offline telematics sync"
+  },
+  {
+    "id": "case-03-creator-economy",
+    "name": "PromptVibe Audio Kits",
+    "industry": "Creator Economy",
+    "business_stage": "idea",
+    "idea_description": "Curated royalty-free sound effects and procedural ambient audio generator for independent YouTube and podcast producers.",
+    "target_market": "Global English-speaking creators",
+    "target_audience": "Solo video editors, game streamers, podcast producers",
+    "budget_amount": 500,
+    "budget_currency": "USD",
+    "team_size": "Solo",
+    "technical_preferences": "Serverless, low operational maintenance",
+    "constraints": "Must operate profitably on under $20/month hosting"
+  },
+  {
+    "id": "case-04-healthtech-remote",
+    "name": "PulseCardio Remote Telehealth",
+    "industry": "Digital Health",
+    "business_stage": "prototype",
+    "idea_description": "Secure remote telemetry portal for private cardiology practices monitoring post-operative pacemaker and Holter monitor data.",
+    "target_market": "United States",
+    "target_audience": "Independent cardiology clinics and post-acute cardiac patients",
+    "budget_amount": 50000,
+    "budget_currency": "USD",
+    "team_size": "2-5",
+    "technical_preferences": "FastAPI, PostgreSQL, HIPAA-compliant storage",
+    "constraints": "HIPAA compliance, BAA required with all third-party providers, audit logging"
+  },
+  {
+    "id": "case-05-b2b-procurement",
+    "name": "VendorMatch Procurement Agent",
+    "industry": "B2B SaaS",
+    "business_stage": "validation",
+    "idea_description": "Automated RFP and supplier negotiation assistant that extracts pricing matrices from PDF quote requests and flags contractual risks.",
+    "target_market": "Global enterprise",
+    "target_audience": "Mid-market procurement leads and corporate purchasing controllers",
+    "budget_amount": 10000,
+    "budget_currency": "USD",
+    "team_size": "2-5",
+    "technical_preferences": "Python, vector embedding search, secure PDF generation",
+    "constraints": "SOC2 compliance readiness, multi-tenant data isolation"
+  }
+]

@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: ai-business-architect
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    region: oregon
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-business-architect-db
+          property: connectionString
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
+      - key: SESSION_HTTPS_ONLY
+        value: "true"
+      - key: SESSION_SAME_SITE
+        value: lax
+      - key: LOG_LEVEL
+        value: INFO
+
+databases:
+  - name: ai-business-architect-db
+    plan: starter
+    region: oregon
+    databaseName: ai_business_architect
+    user: ai_architect_user

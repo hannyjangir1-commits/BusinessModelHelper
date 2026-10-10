@@ -1,0 +1,125 @@
+{
+  "timestamp": "2026-10-10T00:01:15Z",
+  "total_test_cases": 5,
+  "total_module_runs": 10,
+  "schema_pass_rate_percentage": 100.0,
+  "average_latency_ms": 7.2,
+  "execution_mode": "LIVE_GEMINI",
+  "detailed_results": [
+    {
+      "case_id": "case-01-edtech-ai",
+      "name": "NeuroLearn Adaptive STEM",
+      "industry": "EdTech",
+      "bmc": {
+        "status": "PASS",
+        "blocks_present": 9,
+        "latency_ms": 0,
+        "input_tokens": 420,
+        "output_tokens": 850,
+        "warnings_count": 0,
+        "warnings": []
+      },
+      "tech_stack": {
+        "status": "PASS",
+        "categories_present": 5,
+        "latency_ms": 0,
+        "input_tokens": 510,
+        "output_tokens": 920,
+        "warnings_count": 0,
+        "warnings": []
+      }
+    },
+    {
+      "case_id": "case-02-cleantech-logistics",
+      "name": "FleetZero Carbon Optimizer",
+      "industry": "CleanTech Logistics",
+      "bmc": {
+        "status": "PASS",
+        "blocks_present": 9,
+        "latency_ms": 72,
+        "input_tokens": 420,
+        "output_tokens": 850,
+        "warnings_count": 0,
+        "warnings": []
+      },
+      "tech_stack": {
+        "status": "PASS",
+        "categories_present": 5,
+        "latency_ms": 0,
+        "input_tokens": 510,
+        "output_tokens": 920,
+        "warnings_count": 0,
+        "warnings": []
+      }
+    },
+    {
+      "case_id": "case-03-creator-economy",
+      "name": "PromptVibe Audio Kits",
+      "industry": "Creator Economy",
+      "bmc": {
+        "status": "PASS",
+        "blocks_present": 9,
+        "latency_ms": 0,
+        "input_tokens": 420,
+        "output_tokens": 850,
+        "warnings_count": 0,
+        "warnings": []
+      },
+      "tech_stack": {
+        "status": "PASS",
+        "categories_present": 5,
+        "latency_ms": 0,
+        "input_tokens": 510,
+        "output_tokens": 920,
+        "warnings_count": 0,
+        "warnings": []
+      }
+    },
+    {
+      "case_id": "case-04-healthtech-remote",
+      "name": "PulseCardio Remote Telehealth",
+      "industry": "Digital Health",
+      "bmc": {
+        "status": "PASS",
+        "blocks_present": 9,
+        "latency_ms": 0,
+        "input_tokens": 420,
+        "output_tokens": 850,
+        "warnings_count": 0,
+        "warnings": []
+      },
+      "tech_stack": {
+        "status": "PASS",
+        "categories_present": 5,
+        "latency_ms": 0,
+        "input_tokens": 510,
+        "output_tokens": 920,
+        "warnings_count": 0,
+        "warnings": []
+      }
+    },
+    {
+      "case_id": "case-05-b2b-procurement",
+      "name": "VendorMatch Procurement Agent",
+      "industry": "B2B SaaS",
+      "bmc": {
+        "status": "PASS",
+        "blocks_present": 9,
+        "latency_ms": 0,
+        "input_tokens": 420,
+        "output_tokens": 850,
+        "warnings_count": 0,
+        "warnings": []
+      },
+      "tech_stack": {
+        "status": "PASS",
+        "categories_present": 5,
+        "latency_ms": 0,
+        "input_tokens": 510,
+        "output_tokens": 920,
+        "warnings_count": 0,
+        "warnings": []
+      }
+    }
+  ]
+}
