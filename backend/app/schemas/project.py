@@ -67,6 +67,10 @@ class ProjectResponse(BaseModel):
 
     has_business_model: bool = False
     has_technology_stack: bool = False
+    has_validator_report: bool = False
+    has_financial_model: bool = False
+    has_market_research: bool = False
+    has_roadmap: bool = False
     latest_bmc_version: Optional[int] = None
     latest_tech_version: Optional[int] = None
 

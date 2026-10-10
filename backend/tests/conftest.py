@@ -29,10 +29,16 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_
 
 @pytest.fixture(scope="function", autouse=True)
 def clean_db():
-    """Create fresh schema before each test and drop after."""
+    """Create fresh schema before each test and drop after, resetting rate limiters."""
+    from app.core.rate_limiting import login_rate_limiter, registration_rate_limiter
+    login_rate_limiter._requests.clear()
+    registration_rate_limiter._requests.clear()
+
     Base.metadata.create_all(bind=test_engine)
     yield
     Base.metadata.drop_all(bind=test_engine)
+    login_rate_limiter._requests.clear()
+    registration_rate_limiter._requests.clear()
 
 
 @pytest.fixture

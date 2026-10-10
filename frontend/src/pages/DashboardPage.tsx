@@ -206,13 +206,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
 
                 <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">{project.idea_description}</p>
 
-                <div className="pt-2 flex items-center gap-2">
+                <div className="pt-2 flex flex-wrap items-center gap-1.5">
                   {project.has_business_model ? (
                     <Badge variant="emerald" size="sm">
                       BMC v{project.latest_bmc_version || 1}
                     </Badge>
                   ) : (
-                    <Badge variant="amber" size="sm">
+                    <Badge variant="slate" size="sm">
                       No BMC
                     </Badge>
                   )}
@@ -222,8 +222,32 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                       Stack v{project.latest_tech_version || 1}
                     </Badge>
                   ) : (
-                    <Badge variant="amber" size="sm">
+                    <Badge variant="slate" size="sm">
                       No Stack
+                    </Badge>
+                  )}
+
+                  {project.has_validator_report && (
+                    <Badge variant="indigo" size="sm">
+                      Validator
+                    </Badge>
+                  )}
+
+                  {project.has_financial_model && (
+                    <Badge variant="emerald" size="sm">
+                      Financials
+                    </Badge>
+                  )}
+
+                  {project.has_market_research && (
+                    <Badge variant="amber" size="sm">
+                      Research
+                    </Badge>
+                  )}
+
+                  {project.has_roadmap && (
+                    <Badge variant="indigo" size="sm">
+                      Roadmap
                     </Badge>
                   )}
                 </div>

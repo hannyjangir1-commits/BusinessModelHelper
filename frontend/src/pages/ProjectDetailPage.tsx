@@ -2,14 +2,18 @@ import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
+  Bot,
+  Calculator,
   CheckCircle2,
   Clock,
+  Compass,
   Cpu,
   Download,
   Edit2,
   ExternalLink,
   History,
   Layers,
+  Milestone,
   Plus,
   RefreshCw,
   Save,
@@ -22,12 +26,21 @@ import {
   BlueprintVersionItem,
   BMCBlock,
   BusinessModelCanvasData,
+  FinancialModelResponse,
   GenerationRun,
+  MarketResearchResponse,
   Project,
+  RoadmapResponse,
   TechnologyStackData,
   TechRecommendationItem,
+  ValidationReportResponse,
 } from '../types';
 import { Button } from '../components/ui/Button';
+import { IdeaValidatorView } from '../components/modules/IdeaValidatorView';
+import { FinancialEngineView } from '../components/modules/FinancialEngineView';
+import { MarketResearchView } from '../components/modules/MarketResearchView';
+import { RoadmapView } from '../components/modules/RoadmapView';
+import { CopilotWorkspaceView } from '../components/modules/CopilotWorkspaceView';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Modal } from '../components/ui/Modal';
@@ -42,7 +55,9 @@ interface ProjectDetailPageProps {
 
 export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId, onNavigate }) => {
   const [project, setProject] = useState<Project | null>(null);
-  const [activeTab, setActiveTab] = useState<'bmc' | 'tech' | 'overview' | 'history'>('bmc');
+  const [activeTab, setActiveTab] = useState<
+    'bmc' | 'tech' | 'validator' | 'financial' | 'research' | 'roadmap' | 'copilot' | 'overview' | 'history'
+  >('bmc');
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -60,6 +75,20 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
   const [isGeneratingTech, setIsGeneratingTech] = useState<boolean>(false);
   const [editingTechKey, setEditingTechKey] = useState<string | null>(null);
   const [editingTechData, setEditingTechData] = useState<TechnologyStackData | null>(null);
+
+  // Module 1: Idea Validator State
+  const [validatorReport, setValidatorReport] = useState<ValidationReportResponse | null>(null);
+  const [validatorVersions, setValidatorVersions] = useState<BlueprintVersionItem[]>([]);
+
+  // Module 2: Financial Engine State
+  const [financialModel, setFinancialModel] = useState<FinancialModelResponse | null>(null);
+
+  // Module 3: Market Research State
+  const [marketResearch, setMarketResearch] = useState<MarketResearchResponse | null>(null);
+  const [researchVersions, setResearchVersions] = useState<BlueprintVersionItem[]>([]);
+
+  // Module 4: Execution Roadmap State
+  const [roadmap, setRoadmap] = useState<RoadmapResponse | null>(null);
 
   // Generation History State
   const [historyRuns, setHistoryRuns] = useState<GenerationRun[]>([]);
@@ -90,6 +119,42 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
         setTechVersions(versions);
       } catch {
         setTechBlueprint(null);
+      }
+
+      // Load Idea Validator
+      try {
+        const val = await api.validator.get(projectId);
+        setValidatorReport(val);
+        const vVers = await api.validator.listVersions(projectId);
+        setValidatorVersions(vVers);
+      } catch {
+        setValidatorReport(null);
+      }
+
+      // Load Financials
+      try {
+        const fin = await api.financial.get(projectId);
+        setFinancialModel(fin);
+      } catch {
+        setFinancialModel(null);
+      }
+
+      // Load Market Research
+      try {
+        const res = await api.marketResearch.get(projectId);
+        setMarketResearch(res);
+        const rVers = await api.marketResearch.listVersions(projectId);
+        setResearchVersions(rVers);
+      } catch {
+        setMarketResearch(null);
+      }
+
+      // Load Roadmap
+      try {
+        const rd = await api.roadmap.get(projectId);
+        setRoadmap(rd);
+      } catch {
+        setRoadmap(null);
       }
 
       // Load Generation History
@@ -281,10 +346,10 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
       {successMsg && <Alert type="success" message={successMsg} onClose={() => setSuccessMsg(null)} />}
 
       {/* Tabs Navigation */}
-      <div className="flex border-b border-slate-200 gap-6">
+      <div className="flex border-b border-slate-200 gap-2 sm:gap-4 overflow-x-auto pb-px">
         <button
           onClick={() => setActiveTab('bmc')}
-          className={`pb-3 text-sm font-semibold transition-colors border-b-2 flex items-center gap-2 ${
+          className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
             activeTab === 'bmc'
               ? 'border-indigo-600 text-indigo-600'
               : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -301,7 +366,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
 
         <button
           onClick={() => setActiveTab('tech')}
-          className={`pb-3 text-sm font-semibold transition-colors border-b-2 flex items-center gap-2 ${
+          className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
             activeTab === 'tech'
               ? 'border-indigo-600 text-indigo-600'
               : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -317,26 +382,106 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
         </button>
 
         <button
+          onClick={() => setActiveTab('validator')}
+          className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
+            activeTab === 'validator'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <ShieldAlert className="w-4 h-4" />
+          Idea Validator
+          {validatorReport && (
+            <Badge variant="amber" size="sm">
+              v{validatorReport.version}
+            </Badge>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('financial')}
+          className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
+            activeTab === 'financial'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <Calculator className="w-4 h-4" />
+          Financial Planning
+          {financialModel && (
+            <Badge variant="emerald" size="sm">
+              v{financialModel.version}
+            </Badge>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('research')}
+          className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
+            activeTab === 'research'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <Compass className="w-4 h-4" />
+          Market Research
+          {marketResearch && (
+            <Badge variant="sky" size="sm">
+              v{marketResearch.version}
+            </Badge>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('roadmap')}
+          className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
+            activeTab === 'roadmap'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <Milestone className="w-4 h-4" />
+          Execution Roadmap
+          {roadmap && (
+            <Badge variant="indigo" size="sm">
+              {roadmap.completed_tasks}/{roadmap.total_tasks}
+            </Badge>
+          )}
+        </button>
+
+        <button
+          onClick={() => setActiveTab('copilot')}
+          className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
+            activeTab === 'copilot'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-slate-500 hover:text-slate-900'
+          }`}
+        >
+          <Bot className="w-4 h-4" />
+          Blueprint Copilot
+        </button>
+
+        <button
           onClick={() => setActiveTab('overview')}
-          className={`pb-3 text-sm font-semibold transition-colors border-b-2 flex items-center gap-2 ${
+          className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
             activeTab === 'overview'
               ? 'border-indigo-600 text-indigo-600'
               : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
-          Project Overview
+          Overview
         </button>
 
         <button
           onClick={() => setActiveTab('history')}
-          className={`pb-3 text-sm font-semibold transition-colors border-b-2 flex items-center gap-2 ${
+          className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
             activeTab === 'history'
               ? 'border-indigo-600 text-indigo-600'
               : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
           <History className="w-4 h-4" />
-          Audit History ({historyRuns.length})
+          History ({historyRuns.length})
         </button>
       </div>
 
@@ -761,6 +906,52 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
             )}
           </CardContent>
         </Card>
+      )}
+
+      {/* TAB: IDEA VALIDATOR */}
+      {activeTab === 'validator' && (
+        <IdeaValidatorView
+          projectId={projectId}
+          report={validatorReport}
+          versions={validatorVersions}
+          onReportUpdated={fetchProjectData}
+        />
+      )}
+
+      {/* TAB: FINANCIAL PLANNING */}
+      {activeTab === 'financial' && (
+        <FinancialEngineView
+          projectId={projectId}
+          financialModel={financialModel}
+          onModelSaved={fetchProjectData}
+        />
+      )}
+
+      {/* TAB: MARKET RESEARCH */}
+      {activeTab === 'research' && (
+        <MarketResearchView
+          projectId={projectId}
+          research={marketResearch}
+          versions={researchVersions}
+          onResearchUpdated={fetchProjectData}
+        />
+      )}
+
+      {/* TAB: EXECUTION ROADMAP */}
+      {activeTab === 'roadmap' && (
+        <RoadmapView
+          projectId={projectId}
+          roadmap={roadmap}
+          onRoadmapUpdated={fetchProjectData}
+        />
+      )}
+
+      {/* TAB: BLUEPRINT COPILOT */}
+      {activeTab === 'copilot' && (
+        <CopilotWorkspaceView
+          projectId={projectId}
+          onBlueprintModified={fetchProjectData}
+        />
       )}
 
       {/* EDIT BMC BLOCK MODAL */}

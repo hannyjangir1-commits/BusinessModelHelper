@@ -1,0 +1,232 @@
+"""Unit and integration tests for the deterministic Financial Projection Engine."""
+
+import pytest
+from app.schemas.financial import FinancialAssumptions, FinancialSaveRequest
+from app.services.financial_service import (
+    calculate_break_even,
+    calculate_monthly_projections,
+    compute_full_financial_model,
+    generate_scenarios,
+)
+
+
+def test_deterministic_revenue_and_margins():
+    """Verify exact known revenue, variable costs, and contribution margin math."""
+    assumptions = FinancialAssumptions(
+        currency="USD",
+        starting_cash=5000.0,
+        one_time_startup_costs=1000.0,
+        monthly_fixed_expenses=1000.0,
+        marketing_expenditure=500.0,
+        salaries_costs=2000.0,
+        selling_price=100.0,
+        variable_cost_per_unit=20.0,
+        expected_sales_volume=50,
+        monthly_growth_rate_pct=0.0,  # 0% growth for constant baseline verification
+        payment_processing_pct=3.0,
+        tax_rate_pct=20.0,
+        forecast_months=12,
+    )
+
+    # 1. Break-even check
+    # Selling price = 100, variable cost = 20, fee = 3% of 100 = 3.0
+    # Contribution per unit = 100 - 20 - 3 = 77.0
+    # Total fixed monthly burn = 1000 + 500 + 2000 = 3500.0
+    # Break-even units = ceil(3500 / 77) = ceil(45.4545) = 46 units
+    be = calculate_break_even(assumptions)
+    assert be.contribution_margin_per_unit == 77.0
+    assert be.contribution_margin_ratio == 0.77
+    assert be.monthly_fixed_operating_costs == 3500.0
+    assert be.break_even_units_per_month == 46
+    assert be.break_even_revenue_per_month == 4600.0
+    assert be.is_break_even_achievable is True
+
+    # 2. Monthly projections
+    # Units = 50. Revenue = 50 * 100 = 5000.0
+    # Direct var = 50 * 20 = 1000.0, Fees = 5000 * 0.03 = 150.0. Total var = 1150.0
+    # Gross profit = 5000 - 1150 = 3850.0
+    # Operating expenses = 3500.0
+    # Operating profit = 3850 - 3500 = 350.0
+    # Tax = 20% of 350 = 70.0
+    # Net profit = 350 - 70 = 280.0
+    monthly, summary = calculate_monthly_projections(assumptions)
+    assert len(monthly) == 12
+
+    m1 = monthly[0]
+    assert m1.month == 1
+    assert m1.units_sold == 50
+    assert m1.revenue == 5000.0
+    assert m1.direct_variable_costs == 1000.0
+    assert m1.payment_fees == 150.0
+    assert m1.total_variable_costs == 1150.0
+    assert m1.gross_profit == 3850.0
+    assert m1.operating_profit == 350.0
+    assert m1.tax_expense == 70.0
+    assert m1.net_profit == 280.0
+
+    # Month 1 cash flow:
+    # Opening cash = 5000. Inflow = 5000.
+    # Outflow = 1150 + 3500 + 70 + 1000 (startup) = 5720.0
+    # Net cash flow = 5000 - 5720 = -720.0
+    # Closing cash = 5000 - 720 = 4280.0
+    assert m1.opening_cash == 5000.0
+    assert m1.cash_outflows == 5720.0
+    assert m1.net_cash_flow == -720.0
+    assert m1.closing_cash == 4280.0
+
+    # Month 2 cash flow:
+    # No startup costs. Outflow = 1150 + 3500 + 70 = 4720.0
+    # Net cash flow = 5000 - 4720 = +280.0
+    # Closing cash = 4280 + 280 = 4560.0
+    m2 = monthly[1]
+    assert m2.opening_cash == 4280.0
+    assert m2.cash_outflows == 4720.0
+    assert m2.net_cash_flow == 280.0
+    assert m2.closing_cash == 4560.0
+
+
+def test_break_even_negative_contribution_margin():
+    """Verify that when COGS exceed price, break-even safely flags unachievable."""
+    assumptions = FinancialAssumptions(
+        selling_price=10.0,
+        variable_cost_per_unit=15.0,  # Costs more than price
+        expected_sales_volume=10,
+        payment_processing_pct=3.0,
+    )
+    be = calculate_break_even(assumptions)
+    assert be.contribution_margin_per_unit < 0
+    assert be.is_break_even_achievable is False
+    assert be.break_even_units_per_month is None
+    assert be.break_even_revenue_per_month is None
+    assert "exceed the selling price" in be.advisory_note
+
+
+def test_scenario_generation():
+    """Verify 3 distinct scenarios are generated with explicit assumption changes."""
+    base = FinancialAssumptions(
+        selling_price=50.0,
+        variable_cost_per_unit=10.0,
+        expected_sales_volume=100,
+        monthly_growth_rate_pct=10.0,
+    )
+    scenarios = generate_scenarios(base)
+    assert "conservative" in scenarios
+    assert "expected" in scenarios
+    assert "optimistic" in scenarios
+
+    cons = scenarios["conservative"]
+    exp = scenarios["expected"]
+    opt = scenarios["optimistic"]
+
+    # Conservative revenue < Expected < Optimistic
+    assert cons.summary.total_revenue < exp.summary.total_revenue < opt.summary.total_revenue
+    # Conservative sales units < Expected < Optimistic
+    assert cons.monthly_projections[0].units_sold < exp.monthly_projections[0].units_sold < opt.monthly_projections[0].units_sold
+
+
+def test_financial_api_workflow(client):
+    """Test authenticated financial model save, calculate, and version retrieval."""
+    # 1. Register and login
+    reg_resp = client.post(
+        "/api/auth/register",
+        json={
+            "username": "cfo_user",
+            "email": "cfo@example.com",
+            "password": "Password123!",
+            "confirm_password": "Password123!",
+            "display_name": "CFO User",
+            "terms_accepted": True,
+            "privacy_acknowledged": True,
+        },
+    )
+    assert reg_resp.status_code == 201
+
+    # 2. Create project
+    proj_resp = client.post(
+        "/api/projects",
+        json={
+            "name": "Fintech Platform",
+            "idea_description": "Automated billing and finance platform for micro-consultants.",
+            "industry": "Fintech",
+            "business_stage": "prototype",
+        },
+    )
+    assert proj_resp.status_code == 201
+    proj_id = proj_resp.json()["data"]["id"]
+
+    # 3. Stateless recalculate preview
+    calc_resp = client.post(
+        f"/api/projects/{proj_id}/financial/calculate",
+        json={
+            "assumptions": {
+                "currency": "EUR",
+                "selling_price": 80.0,
+                "variable_cost_per_unit": 10.0,
+                "expected_sales_volume": 60,
+                "forecast_months": 12,
+            }
+        },
+    )
+    assert calc_resp.status_code == 200
+    calc_data = calc_resp.json()["data"]
+    assert calc_data["currency"] == "EUR"
+    assert len(calc_data["monthly_projections"]) == 12
+
+    # 4. Save financial model
+    save_resp = client.post(
+        f"/api/projects/{proj_id}/financial",
+        json={
+            "name": "Series A Plan",
+            "assumptions": {
+                "currency": "EUR",
+                "starting_cash": 25000.0,
+                "one_time_startup_costs": 5000.0,
+                "monthly_fixed_expenses": 2000.0,
+                "salaries_costs": 4000.0,
+                "marketing_expenditure": 1000.0,
+                "selling_price": 120.0,
+                "variable_cost_per_unit": 15.0,
+                "expected_sales_volume": 80,
+                "monthly_growth_rate_pct": 8.0,
+                "forecast_months": 12,
+            },
+        },
+    )
+    assert save_resp.status_code == 201
+    saved_model = save_resp.json()["data"]
+    assert saved_model["version"] == 1
+    assert saved_model["currency"] == "EUR"
+
+    # 5. Fetch latest
+    get_resp = client.get(f"/api/projects/{proj_id}/financial")
+    assert get_resp.status_code == 200
+    assert get_resp.json()["data"]["version"] == 1
+
+    # 6. Save version 2
+    save_v2 = client.post(
+        f"/api/projects/{proj_id}/financial",
+        json={
+            "name": "Accelerated Growth Plan",
+            "assumptions": {
+                "currency": "EUR",
+                "starting_cash": 35000.0,
+                "one_time_startup_costs": 5000.0,
+                "monthly_fixed_expenses": 2000.0,
+                "salaries_costs": 4000.0,
+                "marketing_expenditure": 2000.0,
+                "selling_price": 120.0,
+                "variable_cost_per_unit": 15.0,
+                "expected_sales_volume": 120,
+                "monthly_growth_rate_pct": 12.0,
+                "forecast_months": 12,
+            },
+        },
+    )
+    assert save_v2.status_code == 201
+    assert save_v2.json()["data"]["version"] == 2
+
+    # 7. List versions
+    ver_resp = client.get(f"/api/projects/{proj_id}/financial/versions")
+    assert ver_resp.status_code == 200
+    versions = ver_resp.json()["data"]
+    assert len(versions) == 2

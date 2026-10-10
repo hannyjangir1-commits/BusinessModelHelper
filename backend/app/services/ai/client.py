@@ -161,9 +161,12 @@ class MockAIClient:
                 raise self.fail_error
             raise AITimeoutError("Simulated mock timeout failure.")
 
-        # Determine whether Business Model Canvas or Technology Stack was requested
-        if "customer_segments" in system_instruction.lower():
-            mock_json = """{
+        # Determine whether Business Model Canvas, Idea Validator, or Technology Stack was requested
+        lowered_sys = system_instruction.lower()
+
+        # Business Model Canvas
+        if "customer_segments" in lowered_sys or "9-block business model canvas" in lowered_sys:
+            mock_bmc_json = """{
   "overview": "A specialized AI-powered business blueprint platform designed to streamline startup validation and software architectural planning.",
   "key_strategic_focus": "Automated domain-specific business modelling and pragmatic technology recommendations.",
   "customer_segments": {
@@ -275,7 +278,380 @@ class MockAIClient:
     "validation_experiments": ["Simulate 100 concurrent generations and calculate peak cloud costs."]
   }
 }"""
-            return mock_json, 150, 420, 850
+            return mock_bmc_json, 150, 420, 850
+
+        # Idea Validator
+        if "validator" in lowered_sys or "validation" in lowered_sys or "swot" in lowered_sys:
+            mock_val_json = """{
+  "overview": "The business targets a verified friction in founder execution with significant upside if early demand is established prior to technical buildout.",
+  "problem_solution_fit": {
+    "problem_statement": "Founders struggle with fragmented planning, guesswork in financial math, and technical uncertainty during launch.",
+    "who_experiences_it": "Early-stage technical and non-technical solo founders and indie hackers.",
+    "frequency_and_severity": "Weekly recurring pain during early conception and fundraising sprints.",
+    "existing_alternatives": ["Spreadsheets", "Generic chat interfaces", "Notion templates"],
+    "supporting_evidence": ["High search volume for business plan templates and financial projection models."],
+    "missing_evidence": ["Direct founder conversion data on willingness to pay for automated architecture planning."]
+  },
+  "target_customer_clarity": {
+    "primary_segment": "Solo entrepreneurs and technical builders launching their first MVP.",
+    "secondary_segments": ["University incubators", "Freelance agency advisors"],
+    "buyer_vs_end_user": "Founder is typically both the buyer and the primary operator.",
+    "customer_pain_points": ["Fear of running out of runway", "Uncertainty in choosing scalable tech stacks"],
+    "adoption_barriers": ["Habitual reliance on ad-hoc spreadsheets and free ChatGPT prompts."],
+    "unvalidated_assumptions": ["Founders prioritize structured exportable reports over conversational chat."]
+  },
+  "value_proposition_assessment": {
+    "core_benefit": "End-to-end verified blueprinting combining Lean Canvas, deterministic financials, and production tech recommendations in minutes.",
+    "differentiation_hypotheses": ["Deterministic financial formulas ensure CFO-level accuracy instead of hallucinated AI arithmetic."],
+    "potential_weaknesses": ["Churn risk after a founder successfully validates their single current venture."],
+    "critical_dependencies": ["High uptime on AI inference and reliable document generation."],
+    "key_evidence_needed": ["Net Promoter Score above 40 from 20 alpha testers."]
+  },
+  "swot_analysis": {
+    "strengths": ["Proprietary deterministic financial engine", "Unified single-origin architecture", "Zero mock fallback in production"],
+    "weaknesses": ["Bootstrap marketing budget", "Single-founder engineering capacity"],
+    "opportunities": ["Partnerships with startup accelerators and university entrepreneurship cells", "Growing indie hacker ecosystem"],
+    "threats": ["Generic LLM tool suites adding native canvas plugins", "Fast-moving API pricing from cloud providers"]
+  },
+  "business_risks": [
+    {
+      "category": "Customer Adoption",
+      "description": "Founders may use the tool once for initial validation and fail to retain.",
+      "why_it_matters": "Increases customer acquisition cost amortization burden.",
+      "likelihood": "Medium",
+      "impact": "High",
+      "supporting_info": "Common dynamic in early-stage business planning software.",
+      "suggested_mitigation": "Introduce ongoing execution roadmaps and copilot iterations to retain active builders.",
+      "recommended_next_action": "Survey initial 15 users on which features they would use on a monthly basis."
+    },
+    {
+      "category": "Market",
+      "description": "Proliferation of low-cost generic wrapper tools creating market noise.",
+      "why_it_matters": "Higher CAC and skepticism among sophisticated founders.",
+      "likelihood": "High",
+      "impact": "Medium",
+      "supporting_info": "Rapid expansion of AI tools in developer directories.",
+      "suggested_mitigation": "Differentiate via rigorous financial math, source-attributed research, and exportable investor-grade PDFs.",
+      "recommended_next_action": "Publish open architectural benchmarks comparing deterministic vs hallucinated models."
+    },
+    {
+      "category": "Technology",
+      "description": "Upstream LLM latency spikes during peak usage periods.",
+      "why_it_matters": "Degrades user perception of responsiveness during intake wizards.",
+      "likelihood": "Low",
+      "impact": "Medium",
+      "supporting_info": "Occasional transient rate limits on cloud providers.",
+      "suggested_mitigation": "Exponential backoff with jitter and asynchronous job status tracking.",
+      "recommended_next_action": "Run load test simulating 20 concurrent generation requests."
+    }
+  ],
+  "validation_experiments": [
+    {
+      "experiment_name": "Founder Problem Interviews",
+      "experiment_type": "Customer Interviews",
+      "hypothesis": "At least 12 out of 15 founders will cite financial projection modeling as their most dreaded pre-launch hurdle.",
+      "target_audience": "Active indie hackers on Reddit and Twitter/X.",
+      "procedure": "Conduct 20-minute structured neutral interviews asking about past planning attempts.",
+      "estimated_duration": "2 weeks",
+      "estimated_cost": "$0",
+      "success_criteria": "80% confirm high friction and state they would welcome automated modeling.",
+      "interpretation_guidance": "If confirmed, emphasize financial engine in hero messaging."
+    },
+    {
+      "experiment_name": "Landing Page Demand Test",
+      "experiment_type": "Landing Page",
+      "hypothesis": "A focused value proposition page will achieve >= 7% email waitlist conversion from organic developer traffic.",
+      "target_audience": "Builders in entrepreneurship subreddits.",
+      "procedure": "Deploy single-page landing site with blueprint screenshots and email capture.",
+      "estimated_duration": "1 week",
+      "estimated_cost": "$20 (domain & hosting)",
+      "success_criteria": "100 qualified waitlist signups within 7 days.",
+      "interpretation_guidance": "If below 3%, test alternative positioning focused on investor pitch readiness."
+    }
+  ],
+  "interview_questions": [
+    {
+      "question_text": "Walk me through the last time you prepared a business plan or financial model for a project.",
+      "focus_category": "Past Behavior",
+      "rationale": "Focuses on concrete past actions rather than hypothetical future intentions."
+    },
+    {
+      "question_text": "What tools or templates did you turn to, and where did they fall short?",
+      "focus_category": "Current Friction",
+      "rationale": "Reveals genuine friction and current competitive workarounds."
+    },
+    {
+      "question_text": "Have you ever paid for a planning tool, course, or advisory service in the past 12 months?",
+      "focus_category": "Budget Authority",
+      "rationale": "Verifies historical willingness to allocate budget to solving this problem."
+    }
+  ],
+  "summary": {
+    "strongest_supporting_evidence": "Founders universally express frustration with complex spreadsheet financial formulas and generic AI chat advice.",
+    "largest_uncertainties": ["Long-term recurring retention after initial business launch", "Optimal monthly price point for solo builders"],
+    "highest_priority_risks": ["One-off tool churn without sticky execution features"],
+    "most_useful_next_experiment": "15 problem discovery interviews with active founders building in public.",
+    "unverified_assumptions": ["Solo builders will pay a monthly subscription vs a one-off export fee."],
+    "qualitative_readiness_assessment": "Pre-Validation Stage (Strong hypothesis; recommend 10 founder interviews prior to heavy ad spend)."
+  }
+}"""
+            return mock_val_json, 160, 480, 890
+
+        if "competitive intelligence" in lowered_sys or "market research analyst" in lowered_sys or "competitor profiles" in lowered_sys or ("market research" in lowered_sys and "architecture" not in lowered_sys):
+            mock_research_json = """{
+  "executive_summary": "The market shows intense founder demand for verified business blueprinting and deterministic financial modeling, with existing players primarily split between static presentation tools and generic conversational bots.",
+  "industry_definition": "AI-Assisted Business Planning & Architecture SaaS",
+  "market_trends": [
+    {
+      "trend_title": "Demand for Deterministic Financial Precision",
+      "description": "Founders and investors are rejecting hallucinated LLM calculations in favor of code-executed formulas.",
+      "implications_for_founder": "Differentiate by emphasizing pure Python mathematical rigor and zero LLM arithmetic.",
+      "supporting_sources": ["https://news.ycombinator.com/item?id=38129412"]
+    },
+    {
+      "trend_title": "Rise of Micro-SaaS Solo Operators",
+      "description": "Explosion of solo developers launching independent software ventures requiring rapid validation without consulting agencies.",
+      "implications_for_founder": "Price accessible self-service tiers under $30/month with immediate export capabilities.",
+      "supporting_sources": ["https://www.producthunt.com/products/business-model-canvas"]
+    }
+  ],
+  "barriers_to_entry": [
+    "High trust barrier for financial and architectural planning accuracy",
+    "API rate limits and inference costs on unoptimized prompts",
+    "Customer churn following initial business launch"
+  ],
+  "distribution_channels": [
+    "Organic founder communities (Indie Hackers, Reddit, Product Hunt)",
+    "Partnerships with university entrepreneurship incubators",
+    "Open-source architectural case studies and templates"
+  ],
+  "competitors": [
+    {
+      "name": "LivePlan / Traditional Planners",
+      "website": "https://www.liveplan.com",
+      "product_summary": "Established traditional business planning software with multi-year accounting templates.",
+      "target_audience": "Small business owners and bank loan applicants",
+      "pricing_model": "Subscription",
+      "estimated_pricing": "$20 - $40 / month",
+      "key_features": ["Financial forecasts", "Bank-ready templates", "SBA format exports"],
+      "positioning": "Traditional small business bank compliance",
+      "differentiators": ["Recognized by traditional lenders"],
+      "strengths": ["Decades of brand equity", "Extensive accounting terminology"],
+      "weaknesses": ["Slow, manual input forms", "No AI tech stack recommendations", "Outdated UI"],
+      "source_urls": ["https://www.producthunt.com/products/business-model-canvas"]
+    },
+    {
+      "name": "Generic AI Chatbots (ChatGPT / Claude)",
+      "website": "https://chatgpt.com",
+      "product_summary": "General-purpose generative chat interfaces.",
+      "target_audience": "Broad consumer & enterprise",
+      "pricing_model": "Freemium",
+      "estimated_pricing": "$20 / month",
+      "key_features": ["Freeform text generation", "Prompt chat"],
+      "positioning": "Universal AI assistant",
+      "differentiators": ["Massive foundational model power"],
+      "strengths": ["Universal accessibility", "Fast conversational brainstorm"],
+      "weaknesses": ["Unreliable arithmetic", "No structured database persistence", "No exportable investor blueprint format"],
+      "source_urls": ["https://news.ycombinator.com/item?id=38129412"]
+    }
+  ],
+  "comparison_matrix": [
+    {
+      "criterion": "Target Audience",
+      "founder_solution": "Solo founders & modern tech builders",
+      "competitor_comparison": {
+        "LivePlan / Traditional Planners": "Brick-and-mortar SMBs & bank applicants",
+        "Generic AI Chatbots (ChatGPT / Claude)": "General public"
+      }
+    },
+    {
+      "criterion": "Financial Engine Rigor",
+      "founder_solution": "Deterministic Python formulas + break-even units",
+      "competitor_comparison": {
+        "LivePlan / Traditional Planners": "Manual multi-page accounting tables",
+        "Generic AI Chatbots (ChatGPT / Claude)": "Hallucinated / approximate numbers"
+      }
+    },
+    {
+      "criterion": "Technology Stack Guidance",
+      "founder_solution": "Tailored production architecture recommendations with cost trade-offs",
+      "competitor_comparison": {
+        "LivePlan / Traditional Planners": "None",
+        "Generic AI Chatbots (ChatGPT / Claude)": "Generic unstructured bullet points"
+      }
+    }
+  ],
+  "market_sizing": {
+    "market_definition": "Global early-stage digital entrepreneurship planning software",
+    "tam_description": "Over 5 million new digital ventures launched globally each year.",
+    "sam_description": "Approx. 800,000 solo tech builders, agency consultants, and indie developers.",
+    "som_description": "Initial target of 2,500 active subscribers within year 1.",
+    "sizing_caveats": "Figures represent qualitative planning benchmarks derived from industry indicators."
+  },
+  "research_methodology_disclaimer": "Synthesized from external search evidence and AI competitive intelligence."
+}"""
+            return mock_research_json, 170, 520, 950
+
+        if "execution roadmap" in lowered_sys or "actionable roadmap" in lowered_sys or ("roadmap" in lowered_sys and "architecture" not in lowered_sys and "devops" not in lowered_sys):
+            mock_roadmap_json = """{
+  "roadmap_philosophy": "De-risk customer willingness to pay and core unit economics in days 1-30 prior to writing production code, followed by focused MVP execution and managed beta rollout.",
+  "tasks": [
+    {
+      "task_key": "TSK-01",
+      "milestone": "30-day",
+      "stage": "Research & Validation",
+      "title": "Conduct 15 Founder Discovery Interviews",
+      "description": "Interview 15 active early-stage founders to validate friction around business modeling and financial planning spreadsheets.",
+      "priority": "critical",
+      "estimated_effort_days": 3.0,
+      "start_day": 1,
+      "duration_days": 10,
+      "dependencies": [],
+      "deliverable": "Synthesized interview notes with common pain point frequency ranking",
+      "success_criteria": ">= 80% confirm high friction with spreadsheets and unverified AI math",
+      "related_risk": "Customer Adoption Risk",
+      "kpi": "15 completed interviews"
+    },
+    {
+      "task_key": "TSK-02",
+      "milestone": "30-day",
+      "stage": "Planning",
+      "title": "Define Core Schema & API Specifications",
+      "description": "Design Pydantic models, Alembic migrations, and endpoint contracts for the unified business blueprint platform.",
+      "priority": "high",
+      "estimated_effort_days": 2.5,
+      "start_day": 11,
+      "duration_days": 5,
+      "dependencies": ["TSK-01"],
+      "deliverable": "OpenAPI documentation and passing schema validation tests",
+      "success_criteria": "Zero untyped endpoints and full Pydantic v2 validation",
+      "related_risk": "Technical Architecture Risk",
+      "kpi": "100% schema test coverage"
+    },
+    {
+      "task_key": "TSK-03",
+      "milestone": "30-day",
+      "stage": "Planning",
+      "title": "Design Interactive Figma / Tailwind UI Wireframes",
+      "description": "Build responsive accessible layout components for the 9-block canvas, financial charts, and roadmap timeline.",
+      "priority": "medium",
+      "estimated_effort_days": 3.0,
+      "start_day": 15,
+      "duration_days": 7,
+      "dependencies": ["TSK-02"],
+      "deliverable": "Responsive Tailwind CSS component library",
+      "success_criteria": "Mobile, tablet, and desktop responsive layouts with accessible contrast",
+      "related_risk": "UI Usability Friction",
+      "kpi": "Zero broken mobile views"
+    },
+    {
+      "task_key": "TSK-04",
+      "milestone": "60-day",
+      "stage": "Prototype or MVP",
+      "title": "Implement Deterministic Python Financial Engine",
+      "description": "Code pure Python mathematical routines for revenue, COGS, break-even units, cash runway, and scenario modeling.",
+      "priority": "critical",
+      "estimated_effort_days": 5.0,
+      "start_day": 31,
+      "duration_days": 10,
+      "dependencies": ["TSK-02"],
+      "deliverable": "Financial engine unit test suite with 100% mathematical accuracy",
+      "success_criteria": "Deterministic verification of known revenue, gross profit, and break-even cases",
+      "related_risk": "Financial Credibility Risk",
+      "kpi": "0 calculation discrepancies"
+    },
+    {
+      "task_key": "TSK-05",
+      "milestone": "60-day",
+      "stage": "Prototype or MVP",
+      "title": "Build AI Gemini Structured Generation Pipelines",
+      "description": "Implement Gemini SDK wrapper with exponential backoff, token tracking, and structured Pydantic repair.",
+      "priority": "critical",
+      "estimated_effort_days": 6.0,
+      "start_day": 40,
+      "duration_days": 12,
+      "dependencies": ["TSK-04"],
+      "deliverable": "Robust AI service pipeline with zero silent mock fallback in production",
+      "success_criteria": "Clean failure handling and graceful user-facing error reporting",
+      "related_risk": "AI Provider Latency & Rate Limits",
+      "kpi": ">= 99% structured JSON parse rate"
+    },
+    {
+      "task_key": "TSK-06",
+      "milestone": "60-day",
+      "stage": "Launch Preparation",
+      "title": "Containerize & Deploy to Render Web Services",
+      "description": "Set up multi-stage Docker build, configure Render PostgreSQL internal database connection, and verify health checks.",
+      "priority": "high",
+      "estimated_effort_days": 3.0,
+      "start_day": 52,
+      "duration_days": 6,
+      "dependencies": ["TSK-05"],
+      "deliverable": "Live production URL on Render with single-origin static serving",
+      "success_criteria": "Liveness /health endpoint returns 200 OK and assets load under 1.5s",
+      "related_risk": "Deployment Downtime",
+      "kpi": "100% deployment uptime"
+    },
+    {
+      "task_key": "TSK-07",
+      "milestone": "90-day",
+      "stage": "Launch",
+      "title": "Onboard 20 Private Beta Founders",
+      "description": "Invite 20 active founders to build and export their business blueprints and collect structured feedback.",
+      "priority": "high",
+      "estimated_effort_days": 4.0,
+      "start_day": 61,
+      "duration_days": 14,
+      "dependencies": ["TSK-06"],
+      "deliverable": "User feedback report and Net Promoter Score metric",
+      "success_criteria": ">= 70% complete at least 3 planning modules",
+      "related_risk": "Onboarding Drop-off",
+      "kpi": "NPS >= 45"
+    },
+    {
+      "task_key": "TSK-08",
+      "milestone": "90-day",
+      "stage": "Measurement & Iteration",
+      "title": "Iterate Copilot Interactivity & Public Launch",
+      "description": "Incorporate beta founder feedback, polish interactive editing, and announce on Product Hunt and developer communities.",
+      "priority": "medium",
+      "estimated_effort_days": 5.0,
+      "start_day": 76,
+      "duration_days": 14,
+      "dependencies": ["TSK-07"],
+      "deliverable": "Public launch release and announcement posts",
+      "success_criteria": ">= 200 registered users in the first 14 days",
+      "related_risk": "Distribution Stagnation",
+      "kpi": "200 registered founders"
+    }
+  ]
+}"""
+            return mock_roadmap_json, 160, 500, 920
+
+        if "business blueprint editor" in lowered_sys or "propose_edit" in lowered_sys:
+            mock_copilot_proposal_json = """{
+  "target_module": "business_model",
+  "target_section": "customer_segments",
+  "reasoning": "Refined customer segments to prioritize solo developers and micro-SaaS builders with high willingness to pay.",
+  "proposed_content": {
+    "block_title": "Customer Segments",
+    "summary": "High-intent solo tech founders, micro-SaaS builders, and startup accelerator cohorts seeking verified blueprints.",
+    "recommendations": [
+      "Target developer communities on GitHub and Twitter/X with open-source blueprints.",
+      "Offer self-service tier with instant PDF export.",
+      "Partner with startup accelerators for cohort-wide subscriptions."
+    ]
+  }
+}"""
+            return mock_copilot_proposal_json, 140, 320, 480
+
+        if "copilot" in lowered_sys or "founder's question" in lowered_sys or "architect copilot" in lowered_sys:
+            mock_copilot_qa = (
+                "Based on your saved blueprint, your primary strategic advantage is combining deterministic "
+                "financial modeling with automated technology stack blueprints. To reduce churn, focus on the "
+                "30-day roadmap milestones for founder discovery interviews."
+            )
+            return mock_copilot_qa, 120, 280, 150
 
         # Technology Stack
         mock_tech_json = """{

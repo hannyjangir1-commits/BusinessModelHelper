@@ -8,11 +8,20 @@ import {
   Blueprint,
   BlueprintVersionItem,
   BusinessModelCanvasData,
+  CopilotChatResponse,
+  CopilotProposal,
+  CopilotRevisionItem,
+  FinancialAssumptions,
+  FinancialModelResponse,
   GenerationRun,
+  MarketResearchResponse,
   PaginatedResponse,
   Project,
+  RoadmapResponse,
+  RoadmapTask,
   TechnologyStackData,
   User,
+  ValidationReportResponse,
 } from '../types';
 
 let currentCsrfToken: string | null = null;
@@ -269,6 +278,160 @@ export const api = {
 
     async downloadPdf(projectId: string): Promise<Blob> {
       return request<Blob>(`/api/projects/${projectId}/export/pdf`, { method: 'GET' });
+    },
+  },
+
+  validator: {
+    async generate(projectId: string): Promise<ValidationReportResponse> {
+      const res = await request<ApiResponse<ValidationReportResponse>>(`/api/projects/${projectId}/validator/generate`, {
+        method: 'POST',
+      });
+      return res.data!;
+    },
+
+    async get(projectId: string, version?: number): Promise<ValidationReportResponse> {
+      const qs = version ? `?version=${version}` : '';
+      const res = await request<ApiResponse<ValidationReportResponse>>(`/api/projects/${projectId}/validator${qs}`, {
+        method: 'GET',
+      });
+      return res.data!;
+    },
+
+    async listVersions(projectId: string): Promise<BlueprintVersionItem[]> {
+      const res = await request<ApiResponse<BlueprintVersionItem[]>>(`/api/projects/${projectId}/validator/versions`, {
+        method: 'GET',
+      });
+      return res.data || [];
+    },
+  },
+
+  financial: {
+    async get(projectId: string, version?: number): Promise<FinancialModelResponse> {
+      const qs = version ? `?version=${version}` : '';
+      const res = await request<ApiResponse<FinancialModelResponse>>(`/api/projects/${projectId}/financial${qs}`, {
+        method: 'GET',
+      });
+      return res.data!;
+    },
+
+    async save(projectId: string, assumptions: Partial<FinancialAssumptions>): Promise<FinancialModelResponse> {
+      const res = await request<ApiResponse<FinancialModelResponse>>(`/api/projects/${projectId}/financial`, {
+        method: 'POST',
+        body: JSON.stringify(assumptions),
+      });
+      return res.data!;
+    },
+
+    async calculate(projectId: string, assumptions: Partial<FinancialAssumptions>): Promise<any> {
+      const res = await request<ApiResponse<any>>(`/api/projects/${projectId}/financial/calculate`, {
+        method: 'POST',
+        body: JSON.stringify(assumptions),
+      });
+      return res.data!;
+    },
+
+    async listVersions(projectId: string): Promise<any[]> {
+      const res = await request<ApiResponse<any[]>>(`/api/projects/${projectId}/financial/versions`, {
+        method: 'GET',
+      });
+      return res.data || [];
+    },
+  },
+
+  marketResearch: {
+    async generate(projectId: string): Promise<MarketResearchResponse> {
+      const res = await request<ApiResponse<MarketResearchResponse>>(`/api/projects/${projectId}/market-research/generate`, {
+        method: 'POST',
+      });
+      return res.data!;
+    },
+
+    async get(projectId: string, version?: number): Promise<MarketResearchResponse> {
+      const qs = version ? `?version=${version}` : '';
+      const res = await request<ApiResponse<MarketResearchResponse>>(`/api/projects/${projectId}/market-research${qs}`, {
+        method: 'GET',
+      });
+      return res.data!;
+    },
+
+    async listVersions(projectId: string): Promise<BlueprintVersionItem[]> {
+      const res = await request<ApiResponse<BlueprintVersionItem[]>>(`/api/projects/${projectId}/market-research/versions`, {
+        method: 'GET',
+      });
+      return res.data || [];
+    },
+  },
+
+  roadmap: {
+    async generate(projectId: string): Promise<RoadmapResponse> {
+      const res = await request<ApiResponse<RoadmapResponse>>(`/api/projects/${projectId}/roadmap/generate`, {
+        method: 'POST',
+      });
+      return res.data!;
+    },
+
+    async get(projectId: string): Promise<RoadmapResponse> {
+      const res = await request<ApiResponse<RoadmapResponse>>(`/api/projects/${projectId}/roadmap`, {
+        method: 'GET',
+      });
+      return res.data!;
+    },
+
+    async createTask(projectId: string, task: Partial<RoadmapTask>): Promise<RoadmapTask> {
+      const res = await request<ApiResponse<RoadmapTask>>(`/api/projects/${projectId}/roadmap/tasks`, {
+        method: 'POST',
+        body: JSON.stringify(task),
+      });
+      return res.data!;
+    },
+
+    async updateTask(projectId: string, taskId: string, updates: Partial<RoadmapTask>): Promise<RoadmapTask> {
+      const res = await request<ApiResponse<RoadmapTask>>(`/api/projects/${projectId}/roadmap/tasks/${taskId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+      return res.data!;
+    },
+
+    async deleteTask(projectId: string, taskId: string): Promise<boolean> {
+      await request<ApiResponse<any>>(`/api/projects/${projectId}/roadmap/tasks/${taskId}`, {
+        method: 'DELETE',
+      });
+      return true;
+    },
+  },
+
+  copilot: {
+    async chat(
+      projectId: string,
+      payload: { query: string; action_type: 'answer_question' | 'propose_edit'; target_module?: string; target_section?: string }
+    ): Promise<CopilotChatResponse> {
+      const res = await request<ApiResponse<CopilotChatResponse>>(`/api/projects/${projectId}/copilot/chat`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      return res.data!;
+    },
+
+    async acceptProposal(projectId: string, proposalId: string): Promise<CopilotProposal> {
+      const res = await request<ApiResponse<CopilotProposal>>(`/api/projects/${projectId}/copilot/proposals/${proposalId}/accept`, {
+        method: 'POST',
+      });
+      return res.data!;
+    },
+
+    async rejectProposal(projectId: string, proposalId: string): Promise<CopilotProposal> {
+      const res = await request<ApiResponse<CopilotProposal>>(`/api/projects/${projectId}/copilot/proposals/${proposalId}/reject`, {
+        method: 'POST',
+      });
+      return res.data!;
+    },
+
+    async listRevisions(projectId: string): Promise<CopilotRevisionItem[]> {
+      const res = await request<ApiResponse<CopilotRevisionItem[]>>(`/api/projects/${projectId}/copilot/revisions`, {
+        method: 'GET',
+      });
+      return res.data || [];
     },
   },
 

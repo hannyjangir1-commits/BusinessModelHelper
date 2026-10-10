@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-10-10T00:01:15Z",
+  "timestamp": "2026-10-10T17:37:02Z",
   "total_test_cases": 5,
-  "total_module_runs": 10,
+  "total_module_runs": 15,
   "schema_pass_rate_percentage": 100.0,
-  "average_latency_ms": 7.2,
+  "average_latency_ms": 0.0,
   "execution_mode": "LIVE_GEMINI",
   "detailed_results": [
     {
@@ -27,6 +27,15 @@
         "output_tokens": 920,
         "warnings_count": 0,
         "warnings": []
+      },
+      "validator": {
+        "status": "PASS",
+        "swot_present": true,
+        "risks_count": 3,
+        "experiments_count": 2,
+        "latency_ms": 0,
+        "input_tokens": 480,
+        "output_tokens": 890
       }
     },
     {
@@ -36,7 +45,7 @@
       "bmc": {
         "status": "PASS",
         "blocks_present": 9,
-        "latency_ms": 72,
+        "latency_ms": 0,
         "input_tokens": 420,
         "output_tokens": 850,
         "warnings_count": 0,
@@ -50,6 +59,15 @@
         "output_tokens": 920,
         "warnings_count": 0,
         "warnings": []
+      },
+      "validator": {
+        "status": "PASS",
+        "swot_present": true,
+        "risks_count": 3,
+        "experiments_count": 2,
+        "latency_ms": 0,
+        "input_tokens": 480,
+        "output_tokens": 890
       }
     },
     {
@@ -73,6 +91,15 @@
         "output_tokens": 920,
         "warnings_count": 0,
         "warnings": []
+      },
+      "validator": {
+        "status": "PASS",
+        "swot_present": true,
+        "risks_count": 3,
+        "experiments_count": 2,
+        "latency_ms": 0,
+        "input_tokens": 480,
+        "output_tokens": 890
       }
     },
     {
@@ -96,6 +123,15 @@
         "output_tokens": 920,
         "warnings_count": 0,
         "warnings": []
+      },
+      "validator": {
+        "status": "PASS",
+        "swot_present": true,
+        "risks_count": 3,
+        "experiments_count": 2,
+        "latency_ms": 0,
+        "input_tokens": 480,
+        "output_tokens": 890
       }
     },
     {
@@ -119,6 +155,15 @@
         "output_tokens": 920,
         "warnings_count": 0,
         "warnings": []
+      },
+      "validator": {
+        "status": "PASS",
+        "swot_present": true,
+        "risks_count": 3,
+        "experiments_count": 2,
+        "latency_ms": 0,
+        "input_tokens": 480,
+        "output_tokens": 890
       }
     }
   ]

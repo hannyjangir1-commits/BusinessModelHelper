@@ -112,3 +112,73 @@ def test_pdf_generation_produces_valid_bytes():
     assert len(pdf_bytes) > 1000
     # PDF specification magic byte header
     assert pdf_bytes.startswith(b"%PDF")
+
+
+def test_comprehensive_v2_pdf_generation():
+    """Verify that multi-module PDF export includes Idea Validator, Financials, Market Research, and Roadmap."""
+    from app.models.blueprint import Blueprint
+    from app.models.financial_model import FinancialModel
+    from app.models.roadmap_task import RoadmapTask
+
+    project = Project(
+        name="Fintech Pro",
+        idea_description="Automated invoicing and deterministic financial planning.",
+        industry="Fintech",
+        business_stage="mvp",
+        budget_amount=20000.0,
+        budget_currency="USD",
+        team_size="3",
+    )
+
+    bmc = Blueprint(
+        module_type="business_model",
+        version=1,
+        content_json={"customer_segments": {"block_title": "Customer Segments", "summary": "B2B SaaS founders"}},
+    )
+    tech = Blueprint(
+        module_type="technology_stack",
+        version=1,
+        content_json={"backend": {"technology": "FastAPI", "purpose": "API layer", "estimated_cost": "$7/mo"}},
+    )
+    validator = Blueprint(
+        module_type="validation_report",
+        version=1,
+        content_json={
+            "overview": "Strong founder-problem fit.",
+            "swot_analysis": {"strengths": ["Fast API"], "weaknesses": ["Small team"], "opportunities": ["Growing market"], "threats": ["Big tech"]},
+        },
+    )
+    fin = FinancialModel(
+        version=1,
+        currency="USD",
+        projections_json={
+            "summary_metrics": {"break_even_units": 45, "break_even_revenue": 4500.0, "initial_capital_required": 1200.0, "runway_months": 14.5},
+            "monthly_projections": [{"month": 1, "units_sold": 10, "revenue": 1000.0, "cogs": 200.0, "gross_profit": 800.0, "operating_expenses": 500.0, "net_profit": 300.0, "closing_cash": 20500.0}],
+        },
+    )
+    research = Blueprint(
+        module_type="market_research",
+        version=1,
+        content_json={
+            "executive_summary": "Intense market demand for financial accuracy.",
+            "competitors": [{"name": "OldPlanner", "website": "https://example.com", "estimated_pricing": "$40/mo"}],
+        },
+    )
+    tasks = [
+        RoadmapTask(task_key="TSK-01", milestone="30-day", title="Build MVP", priority="critical", status="in_progress", deliverable="Deployed container"),
+        RoadmapTask(task_key="TSK-02", milestone="60-day", title="Beta Testing", priority="high", status="pending", deliverable="User feedback report"),
+    ]
+
+    pdf_bytes = generate_project_blueprint_pdf(
+        project,
+        bmc_blueprint=bmc,
+        tech_blueprint=tech,
+        validator_report=validator,
+        financial_model=fin,
+        research_report=research,
+        roadmap_tasks=tasks,
+    )
+
+    assert isinstance(pdf_bytes, bytes)
+    assert len(pdf_bytes) > 5000  # Multi-page comprehensive report
+    assert pdf_bytes.startswith(b"%PDF")

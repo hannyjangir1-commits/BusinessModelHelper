@@ -12,6 +12,9 @@ if TYPE_CHECKING:
     from app.models.user import User
     from app.models.blueprint import Blueprint
     from app.models.generation import GenerationRun
+    from app.models.financial_model import FinancialModel
+    from app.models.roadmap_task import RoadmapTask
+    from app.models.copilot_revision import CopilotRevision
 
 
 def utc_now() -> datetime:
@@ -46,3 +49,6 @@ class Project(Base):
     user: Mapped["User"] = relationship("User", back_populates="projects")
     blueprints: Mapped[List["Blueprint"]] = relationship("Blueprint", back_populates="project", cascade="all, delete-orphan")
     generation_runs: Mapped[List["GenerationRun"]] = relationship("GenerationRun", back_populates="project", cascade="all, delete-orphan")
+    financial_models: Mapped[List["FinancialModel"]] = relationship("FinancialModel", back_populates="project", cascade="all, delete-orphan")
+    roadmap_tasks: Mapped[List["RoadmapTask"]] = relationship("RoadmapTask", back_populates="project", cascade="all, delete-orphan")
+    copilot_revisions: Mapped[List["CopilotRevision"]] = relationship("CopilotRevision", back_populates="project", cascade="all, delete-orphan")

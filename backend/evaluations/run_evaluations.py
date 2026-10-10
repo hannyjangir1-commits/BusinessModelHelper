@@ -128,6 +128,34 @@ def run_evaluation():
             case_result["tech_stack"] = {"status": "FAIL", "error": str(e)}
             print(f"  [FAIL] Tech Stack ({str(e)})")
 
+        # 3. Evaluate Idea Validator
+        total_evaluations += 1
+        from app.services.ai.validator_pipeline import build_validator_prompt, validate_validator_response
+        sys_prompt, user_prompt = build_validator_prompt(dummy_project)
+        t0 = time.perf_counter()
+        val_passed = False
+        try:
+            raw_text, lat, in_tok, out_tok = client.generate(sys_prompt, user_prompt)
+            val_data = validate_validator_response(raw_text)
+            elapsed = int((time.perf_counter() - t0) * 1000)
+            total_latency_ms += elapsed
+
+            val_passed = True
+            passed_schemas += 1
+            case_result["validator"] = {
+                "status": "PASS",
+                "swot_present": True,
+                "risks_count": len(val_data.business_risks),
+                "experiments_count": len(val_data.validation_experiments),
+                "latency_ms": elapsed,
+                "input_tokens": in_tok,
+                "output_tokens": out_tok,
+            }
+            print(f"  [PASS] Validator (SWOT + {len(val_data.business_risks)} risks + {len(val_data.validation_experiments)} experiments, {elapsed}ms)")
+        except Exception as e:
+            case_result["validator"] = {"status": "FAIL", "error": str(e)}
+            print(f"  [FAIL] Validator ({str(e)})")
+
         results.append(case_result)
 
     pass_rate = (passed_schemas / total_evaluations) * 100 if total_evaluations else 0

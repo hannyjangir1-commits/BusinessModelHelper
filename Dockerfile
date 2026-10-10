@@ -48,5 +48,5 @@ COPY --from=frontend-builder /app/frontend/dist ./static
 # Expose dynamic application port (Render assigns $PORT)
 EXPOSE 8000
 
-# Start server honoring $PORT environment variable
-CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Run additive Alembic migrations then start server honoring $PORT
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
