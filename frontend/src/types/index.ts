@@ -212,24 +212,32 @@ export interface ValidationExperiment {
   interpretation_guidance: string;
 }
 
+export interface CustomerInterviewQuestion {
+  question_text: string;
+  focus_category?: string;
+  rationale?: string;
+}
+
+export type InterviewQuestionItem = string | CustomerInterviewQuestion;
+
 export interface ValidationSummary {
-  strongest_supporting_evidence: string[];
-  largest_uncertainties: string[];
-  highest_priority_risks: string[];
-  most_useful_next_experiment: string;
-  unverified_assumptions: string[];
-  qualitative_readiness_assessment: string;
+  strongest_supporting_evidence?: string[] | string;
+  largest_uncertainties?: string[];
+  highest_priority_risks?: string[];
+  most_useful_next_experiment?: string;
+  unverified_assumptions?: string[];
+  qualitative_readiness_assessment?: string;
 }
 
 export interface ValidationReportData {
   overview: string;
   problem_solution_fit: ProblemSolutionFit;
   target_customer_clarity: TargetCustomerClarity;
-  value_proposition_assessment: ValuePropositionAssessment;
+  value_proposition_assessment?: ValuePropositionAssessment;
   swot_analysis: SWOTAnalysis;
   business_risks: BusinessRisk[];
   validation_experiments: ValidationExperiment[];
-  interview_questions: string[];
+  interview_questions: InterviewQuestionItem[];
   summary: ValidationSummary;
 }
 
@@ -244,100 +252,6 @@ export interface ValidationReportResponse {
   updated_at: string;
 }
 
-// ============================================================================
-// MODULE 2: FINANCIAL PROJECTION ENGINE
-// ============================================================================
-export interface FinancialAssumptions {
-  currency: string;
-  starting_cash: number;
-  one_time_startup_costs: number;
-  initial_equipment_costs: number;
-  monthly_fixed_costs: number;
-  variable_cost_per_unit: number;
-  selling_price: number;
-  initial_monthly_volume: number;
-  monthly_growth_rate: number;
-  payment_processing_pct: number;
-  monthly_marketing_budget: number;
-  monthly_salaries: number;
-  estimated_tax_rate: number;
-  forecast_months: number;
-}
-
-export interface BreakEvenAnalysis {
-  contribution_margin_per_unit?: number;
-  contribution_margin_ratio?: number;
-  monthly_fixed_operating_costs?: number;
-  break_even_units_per_month?: number | null;
-  break_even_revenue_per_month?: number | null;
-  is_break_even_achievable?: boolean;
-}
-
-export interface SummaryMetrics {
-  break_even_units?: number | string;
-  break_even_revenue?: number | string;
-  contribution_margin_per_unit?: number;
-  contribution_margin_ratio?: number;
-  initial_capital_required?: number;
-  recommended_startup_capital?: number;
-  runway_months?: number;
-  estimated_runway_months?: number;
-  total_revenue_forecast?: number;
-  total_revenue?: number;
-  total_cogs_forecast?: number;
-  total_gross_profit_forecast?: number;
-  gross_profit?: number;
-  total_operating_expenses_forecast?: number;
-  total_operating_expenses?: number;
-  total_net_profit_forecast?: number;
-  net_profit?: number;
-}
-
-export interface MonthlyProjectionItem {
-  month: number;
-  units_sold: number;
-  revenue: number;
-  cogs?: number;
-  total_variable_costs?: number;
-  direct_variable_costs?: number;
-  payment_fees?: number;
-  gross_profit: number;
-  operating_expenses: number;
-  net_profit_pre_tax?: number;
-  operating_profit?: number;
-  estimated_tax?: number;
-  tax_expense?: number;
-  net_profit: number;
-  cash_inflows?: number;
-  cash_outflows: number;
-  net_cash_flow: number;
-  opening_cash: number;
-  closing_cash: number;
-}
-
-export interface FinancialScenario {
-  scenario_name: 'conservative' | 'expected' | 'optimistic';
-  assumptions: FinancialAssumptions;
-  summary_metrics?: SummaryMetrics;
-  summary?: SummaryMetrics;
-  break_even?: BreakEvenAnalysis;
-}
-
-export interface FinancialModelResponse {
-  id: string;
-  project_id: string;
-  version: number;
-  currency: string;
-  forecast_months: number;
-  assumptions: FinancialAssumptions;
-  summary: SummaryMetrics;
-  summary_metrics?: SummaryMetrics;
-  break_even?: BreakEvenAnalysis;
-  monthly_projections: MonthlyProjectionItem[];
-  scenarios: Record<string, FinancialScenario>;
-  created_at: string;
-  updated_at: string;
-}
 
 // ============================================================================
 // MODULE 3: MARKET & COMPETITOR RESEARCH
@@ -394,14 +308,17 @@ export interface MarketResearchReportData {
     sizing_caveats: string;
   };
   research_methodology_disclaimer: string;
+  sources?: SourceItem[];
 }
 
 export interface MarketResearchResponse {
   id: string;
   project_id: string;
+  module_type?: string;
   version: number;
-  content: MarketResearchReportData;
-  sources: SourceItem[];
+  content?: MarketResearchReportData;
+  content_json?: MarketResearchReportData;
+  sources?: SourceItem[];
   created_at: string;
   updated_at: string;
 }

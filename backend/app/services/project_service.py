@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFoundError
 from app.models.blueprint import Blueprint
-from app.models.financial_model import FinancialModel
 from app.models.project import Project
 from app.models.roadmap_task import RoadmapTask
 from app.models.user import User
@@ -31,14 +30,7 @@ def _map_project_response(project: Project, db: Session) -> ProjectResponse:
     resp.has_market_research = "market_research" in bp_map
     resp.latest_bmc_version = bp_map.get("business_model")
     resp.latest_tech_version = bp_map.get("technology_stack")
-
-    has_financial = (
-        db.execute(
-            select(func.count(FinancialModel.id)).where(FinancialModel.project_id == project.id)
-        ).scalar_one()
-        > 0
-    )
-    resp.has_financial_model = has_financial
+    resp.has_financial_model = False
 
     has_roadmap = (
         db.execute(

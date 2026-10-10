@@ -6,7 +6,6 @@ from app.api.auth import router as auth_router
 from app.api.business_model import router as bmc_router
 from app.api.copilot import router as copilot_router
 from app.api.exports import router as exports_router
-from app.api.financial import router as financial_router
 from app.api.generations import router as generations_router
 from app.api.health import router as health_router
 from app.api.legal import router as legal_router
@@ -25,7 +24,6 @@ api_router.include_router(projects_router)
 api_router.include_router(bmc_router)
 api_router.include_router(tech_router)
 api_router.include_router(validator_router)
-api_router.include_router(financial_router)
 api_router.include_router(market_research_router)
 api_router.include_router(roadmap_router)
 api_router.include_router(copilot_router)

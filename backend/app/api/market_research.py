@@ -17,10 +17,11 @@ from app.schemas.market_research import MarketResearchUpdateRequest
 from app.services.project_service import get_user_project_by_id
 from app.services.research.research_pipeline import generate_market_research_report
 
-router = APIRouter(prefix="/projects/{project_id}/market-research", tags=["Market Research"])
+router = APIRouter(tags=["Market Research"])
 
 
-@router.post("/generate", response_model=ApiResponse[BlueprintResponse], status_code=status.HTTP_201_CREATED)
+@router.post("/projects/{project_id}/market-research/generate", response_model=ApiResponse[BlueprintResponse], status_code=status.HTTP_201_CREATED)
+@router.post("/projects/{project_id}/research/generate", response_model=ApiResponse[BlueprintResponse], status_code=status.HTTP_201_CREATED)
 def generate_research(
     project_id: str,
     current_user: User = Depends(get_current_user),
@@ -35,7 +36,8 @@ def generate_research(
     return ApiResponse(data=BlueprintResponse.model_validate(blueprint), message=msg)
 
 
-@router.get("", response_model=ApiResponse[BlueprintResponse])
+@router.get("/projects/{project_id}/market-research", response_model=ApiResponse[BlueprintResponse])
+@router.get("/projects/{project_id}/research", response_model=ApiResponse[BlueprintResponse])
 def get_latest_or_version_research(
     project_id: str,
     version: Optional[int] = Query(None, description="Specific version number; defaults to latest"),
@@ -61,7 +63,8 @@ def get_latest_or_version_research(
     return ApiResponse(data=BlueprintResponse.model_validate(blueprint))
 
 
-@router.get("/versions", response_model=ApiResponse[List[BlueprintVersionItem]])
+@router.get("/projects/{project_id}/market-research/versions", response_model=ApiResponse[List[BlueprintVersionItem]])
+@router.get("/projects/{project_id}/research/versions", response_model=ApiResponse[List[BlueprintVersionItem]])
 def list_research_versions(
     project_id: str,
     current_user: User = Depends(get_current_user),
@@ -82,7 +85,8 @@ def list_research_versions(
     return ApiResponse(data=[BlueprintVersionItem.model_validate(b) for b in blueprints])
 
 
-@router.patch("", response_model=ApiResponse[BlueprintResponse])
+@router.patch("/projects/{project_id}/market-research", response_model=ApiResponse[BlueprintResponse])
+@router.patch("/projects/{project_id}/research", response_model=ApiResponse[BlueprintResponse])
 def update_research_content(
     project_id: str,
     update_data: MarketResearchUpdateRequest,

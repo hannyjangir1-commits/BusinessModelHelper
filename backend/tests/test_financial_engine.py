@@ -124,8 +124,8 @@ def test_scenario_generation():
     assert cons.monthly_projections[0].units_sold < exp.monthly_projections[0].units_sold < opt.monthly_projections[0].units_sold
 
 
-def test_financial_api_workflow(client):
-    """Test authenticated financial model save, calculate, and version retrieval."""
+def test_financial_api_endpoints_disabled(client):
+    """Verify that financial planning endpoints are no longer registered on the API router."""
     # 1. Register and login
     reg_resp = client.post(
         "/api/auth/register",
@@ -154,7 +154,7 @@ def test_financial_api_workflow(client):
     assert proj_resp.status_code == 201
     proj_id = proj_resp.json()["data"]["id"]
 
-    # 3. Stateless recalculate preview
+    # 3. Verify POST /financial/calculate is not an active endpoint (returns 404 or 405)
     calc_resp = client.post(
         f"/api/projects/{proj_id}/financial/calculate",
         json={
@@ -167,12 +167,9 @@ def test_financial_api_workflow(client):
             }
         },
     )
-    assert calc_resp.status_code == 200
-    calc_data = calc_resp.json()["data"]
-    assert calc_data["currency"] == "EUR"
-    assert len(calc_data["monthly_projections"]) == 12
+    assert calc_resp.status_code in (404, 405)
 
-    # 4. Save financial model
+    # 4. Verify POST /financial is not an active endpoint
     save_resp = client.post(
         f"/api/projects/{proj_id}/financial",
         json={
@@ -192,44 +189,15 @@ def test_financial_api_workflow(client):
             },
         },
     )
-    assert save_resp.status_code == 201
-    saved_model = save_resp.json()["data"]
-    assert saved_model["version"] == 1
-    assert saved_model["currency"] == "EUR"
+    assert save_resp.status_code in (404, 405)
 
-    # 5. Fetch latest
+    # 5. Verify GET /financial is not an active endpoint
     get_resp = client.get(f"/api/projects/{proj_id}/financial")
-    assert get_resp.status_code == 200
-    assert get_resp.json()["data"]["version"] == 1
+    assert get_resp.status_code in (404, 405)
 
-    # 6. Save version 2
-    save_v2 = client.post(
-        f"/api/projects/{proj_id}/financial",
-        json={
-            "name": "Accelerated Growth Plan",
-            "assumptions": {
-                "currency": "EUR",
-                "starting_cash": 35000.0,
-                "one_time_startup_costs": 5000.0,
-                "monthly_fixed_expenses": 2000.0,
-                "salaries_costs": 4000.0,
-                "marketing_expenditure": 2000.0,
-                "selling_price": 120.0,
-                "variable_cost_per_unit": 15.0,
-                "expected_sales_volume": 120,
-                "monthly_growth_rate_pct": 12.0,
-                "forecast_months": 12,
-            },
-        },
-    )
-    assert save_v2.status_code == 201
-    assert save_v2.json()["data"]["version"] == 2
-
-    # 7. List versions
+    # 6. Verify GET /financial/versions is not an active endpoint
     ver_resp = client.get(f"/api/projects/{proj_id}/financial/versions")
-    assert ver_resp.status_code == 200
-    versions = ver_resp.json()["data"]
-    assert len(versions) == 2
+    assert ver_resp.status_code in (404, 405)
 
 
 def test_financial_schema_alias_and_percentage_normalization():
@@ -261,78 +229,21 @@ def test_financial_schema_alias_and_percentage_normalization():
     assert assumptions.tax_rate_pct == 20.0
 
 
-def test_financial_unwrapped_calculate_and_save_api(client):
-    """Verify API handles unwrapped payloads and returns response fields required by UI."""
-    reg_resp = client.post(
-        "/api/auth/register",
-        json={
-            "username": "unwrapped_cfo",
-            "email": "unwrapped_cfo@example.com",
-            "password": "Password123!",
-            "confirm_password": "Password123!",
-            "display_name": "Unwrapped CFO",
-            "terms_accepted": True,
-            "privacy_acknowledged": True,
-        },
+def test_direct_service_calculation():
+    """Verify pure calculation service compute_full_financial_model remains functional."""
+    assumptions = FinancialAssumptions(
+        currency="USD",
+        starting_cash=10000.0,
+        selling_price=50.0,
+        variable_cost_per_unit=10.0,
+        expected_sales_volume=100,
+        monthly_growth_rate_pct=5.0,
+        forecast_months=12,
     )
-    assert reg_resp.status_code == 201
-
-    # Create project
-    proj_resp = client.post(
-        "/api/projects",
-        json={
-            "name": "FinTech Startup",
-            "idea_description": "Payment app for global contractors",
-            "industry": "FinTech",
-        },
-    )
-    assert proj_resp.status_code == 201
-    proj_id = proj_resp.json()["data"]["id"]
-
-    # Calculate with flat/unwrapped payload and frontend field names
-    calc_resp = client.post(
-        f"/api/projects/{proj_id}/financial/calculate",
-        json={
-            "currency": "USD",
-            "starting_cash": 15000.0,
-            "monthly_fixed_costs": 2500.0,
-            "monthly_salaries": 4000.0,
-            "monthly_marketing_budget": 1000.0,
-            "selling_price": 80.0,
-            "variable_cost_per_unit": 20.0,
-            "initial_monthly_volume": 60,
-            "monthly_growth_rate": 0.08,
-            "tax_rate": 0.15,
-        },
-    )
-    assert calc_resp.status_code == 200
-    calc_data = calc_resp.json()["data"]
-    # Check that UI compatibility response fields are present
-    assert "summary_metrics" in calc_data
-    assert calc_data["summary_metrics"]["break_even_units"] is not None
-    assert calc_data["summary_metrics"]["initial_capital_required"] is not None
-    assert calc_data["summary_metrics"]["runway_months"] is not None
-    assert len(calc_data["monthly_projections"]) == 12
-    assert "cogs" in calc_data["monthly_projections"][0]
-
-    # Save with flat/unwrapped payload
-    save_resp = client.post(
-        f"/api/projects/{proj_id}/financial",
-        json={
-            "currency": "USD",
-            "starting_cash": 15000.0,
-            "monthly_fixed_costs": 2500.0,
-            "monthly_salaries": 4000.0,
-            "monthly_marketing_budget": 1000.0,
-            "selling_price": 80.0,
-            "variable_cost_per_unit": 20.0,
-            "initial_monthly_volume": 60,
-            "monthly_growth_rate": 0.08,
-        },
-    )
-    assert save_resp.status_code == 201
-    save_data = save_resp.json()["data"]
-    assert save_data["version"] == 1
-    assert "summary_metrics" in save_data
+    model_data = compute_full_financial_model(assumptions, project_id="proj-123")
+    assert model_data.currency == "USD"
+    assert len(model_data.monthly_projections) == 12
+    assert model_data.summary is not None
+    assert model_data.break_even is not None
 
 

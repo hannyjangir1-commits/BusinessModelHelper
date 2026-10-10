@@ -1,20 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import {
-  AlertCircle,
   ArrowLeft,
   Bot,
-  Calculator,
   CheckCircle2,
-  Clock,
   Compass,
   Cpu,
   Download,
   Edit2,
-  ExternalLink,
   History,
   Layers,
   Milestone,
-  Plus,
   RefreshCw,
   Save,
   ShieldAlert,
@@ -26,7 +21,6 @@ import {
   BlueprintVersionItem,
   BMCBlock,
   BusinessModelCanvasData,
-  FinancialModelResponse,
   GenerationRun,
   MarketResearchResponse,
   Project,
@@ -37,7 +31,6 @@ import {
 } from '../types';
 import { Button } from '../components/ui/Button';
 import { IdeaValidatorView } from '../components/modules/IdeaValidatorView';
-import { FinancialEngineView } from '../components/modules/FinancialEngineView';
 import { MarketResearchView } from '../components/modules/MarketResearchView';
 import { RoadmapView } from '../components/modules/RoadmapView';
 import { CopilotWorkspaceView } from '../components/modules/CopilotWorkspaceView';
@@ -47,17 +40,53 @@ import { Modal } from '../components/ui/Modal';
 import { Input } from '../components/ui/Input';
 import { Textarea } from '../components/ui/Textarea';
 import { Alert } from '../components/ui/Alert';
+import { ErrorBoundary } from '../components/ui/ErrorBoundary';
+
+type TabType =
+  | 'bmc'
+  | 'tech'
+  | 'validator'
+  | 'research'
+  | 'roadmap'
+  | 'copilot'
+  | 'overview'
+  | 'history';
+
+const normalizeTab = (tab?: string): TabType => {
+  if (!tab) return 'bmc';
+  const clean = tab.toLowerCase().trim();
+  if (clean === 'market-research' || clean === 'research') return 'research';
+  if (clean === 'validator' || clean === 'idea-validator') return 'validator';
+  if (clean === 'roadmap' || clean === 'execution-roadmap') return 'roadmap';
+  if (clean === 'copilot' || clean === 'blueprint-copilot') return 'copilot';
+  if (clean === 'tech' || clean === 'technology-stack' || clean === 'tech-stack') return 'tech';
+  if (clean === 'overview') return 'overview';
+  if (clean === 'history') return 'history';
+  return 'bmc';
+};
 
 interface ProjectDetailPageProps {
   projectId: string;
+  initialTab?: string;
   onNavigate: (path: string) => void;
 }
 
-export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId, onNavigate }) => {
+export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId, initialTab, onNavigate }) => {
   const [project, setProject] = useState<Project | null>(null);
-  const [activeTab, setActiveTab] = useState<
-    'bmc' | 'tech' | 'validator' | 'financial' | 'research' | 'roadmap' | 'copilot' | 'overview' | 'history'
-  >('bmc');
+  const [activeTab, setActiveTab] = useState<TabType>(() => normalizeTab(initialTab));
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(normalizeTab(initialTab));
+    }
+  }, [initialTab]);
+
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    const tabSlug = tab === 'research' ? 'market-research' : tab;
+    window.history.replaceState({}, '', `/projects/${projectId}/${tabSlug}`);
+  };
+
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -80,14 +109,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
   const [validatorReport, setValidatorReport] = useState<ValidationReportResponse | null>(null);
   const [validatorVersions, setValidatorVersions] = useState<BlueprintVersionItem[]>([]);
 
-  // Module 2: Financial Engine State
-  const [financialModel, setFinancialModel] = useState<FinancialModelResponse | null>(null);
-
-  // Module 3: Market Research State
+  // Module 2: Market Research State
   const [marketResearch, setMarketResearch] = useState<MarketResearchResponse | null>(null);
   const [researchVersions, setResearchVersions] = useState<BlueprintVersionItem[]>([]);
 
-  // Module 4: Execution Roadmap State
+  // Module 3: Execution Roadmap State
   const [roadmap, setRoadmap] = useState<RoadmapResponse | null>(null);
 
   // Generation History State
@@ -129,14 +155,6 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
         setValidatorVersions(vVers);
       } catch {
         setValidatorReport(null);
-      }
-
-      // Load Financials
-      try {
-        const fin = await api.financial.get(projectId);
-        setFinancialModel(fin);
-      } catch {
-        setFinancialModel(null);
       }
 
       // Load Market Research
@@ -348,7 +366,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
       {/* Tabs Navigation */}
       <div className="flex border-b border-slate-200 gap-2 sm:gap-4 overflow-x-auto pb-px">
         <button
-          onClick={() => setActiveTab('bmc')}
+          onClick={() => handleTabChange('bmc')}
           className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
             activeTab === 'bmc'
               ? 'border-indigo-600 text-indigo-600'
@@ -365,7 +383,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
         </button>
 
         <button
-          onClick={() => setActiveTab('tech')}
+          onClick={() => handleTabChange('tech')}
           className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
             activeTab === 'tech'
               ? 'border-indigo-600 text-indigo-600'
@@ -382,7 +400,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
         </button>
 
         <button
-          onClick={() => setActiveTab('validator')}
+          onClick={() => handleTabChange('validator')}
           className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
             activeTab === 'validator'
               ? 'border-indigo-600 text-indigo-600'
@@ -399,24 +417,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
         </button>
 
         <button
-          onClick={() => setActiveTab('financial')}
-          className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
-            activeTab === 'financial'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-slate-500 hover:text-slate-900'
-          }`}
-        >
-          <Calculator className="w-4 h-4" />
-          Financial Planning
-          {financialModel && (
-            <Badge variant="emerald" size="sm">
-              v{financialModel.version}
-            </Badge>
-          )}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('research')}
+          onClick={() => handleTabChange('research')}
           className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
             activeTab === 'research'
               ? 'border-indigo-600 text-indigo-600'
@@ -424,7 +425,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
           }`}
         >
           <Compass className="w-4 h-4" />
-          Market Research
+          Market Research / Competitor Analysis
           {marketResearch && (
             <Badge variant="sky" size="sm">
               v{marketResearch.version}
@@ -433,7 +434,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
         </button>
 
         <button
-          onClick={() => setActiveTab('roadmap')}
+          onClick={() => handleTabChange('roadmap')}
           className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
             activeTab === 'roadmap'
               ? 'border-indigo-600 text-indigo-600'
@@ -450,7 +451,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
         </button>
 
         <button
-          onClick={() => setActiveTab('copilot')}
+          onClick={() => handleTabChange('copilot')}
           className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
             activeTab === 'copilot'
               ? 'border-indigo-600 text-indigo-600'
@@ -462,7 +463,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
         </button>
 
         <button
-          onClick={() => setActiveTab('overview')}
+          onClick={() => handleTabChange('overview')}
           className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
             activeTab === 'overview'
               ? 'border-indigo-600 text-indigo-600'
@@ -473,7 +474,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
         </button>
 
         <button
-          onClick={() => setActiveTab('history')}
+          onClick={() => handleTabChange('history')}
           className={`pb-3 text-xs sm:text-sm font-semibold transition-colors border-b-2 flex items-center gap-1.5 whitespace-nowrap px-1 ${
             activeTab === 'history'
               ? 'border-indigo-600 text-indigo-600'
@@ -910,48 +911,48 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
 
       {/* TAB: IDEA VALIDATOR */}
       {activeTab === 'validator' && (
-        <IdeaValidatorView
-          projectId={projectId}
-          report={validatorReport}
-          versions={validatorVersions}
-          onReportUpdated={fetchProjectData}
-        />
-      )}
-
-      {/* TAB: FINANCIAL PLANNING */}
-      {activeTab === 'financial' && (
-        <FinancialEngineView
-          projectId={projectId}
-          financialModel={financialModel}
-          onModelSaved={fetchProjectData}
-        />
+        <ErrorBoundary fallbackTitle="Idea Validator Module Error" fallbackMessage="An error occurred while displaying the Idea Validator module.">
+          <IdeaValidatorView
+            projectId={projectId}
+            report={validatorReport}
+            versions={validatorVersions}
+            onReportUpdated={fetchProjectData}
+          />
+        </ErrorBoundary>
       )}
 
       {/* TAB: MARKET RESEARCH */}
       {activeTab === 'research' && (
-        <MarketResearchView
-          projectId={projectId}
-          research={marketResearch}
-          versions={researchVersions}
-          onResearchUpdated={fetchProjectData}
-        />
+        <ErrorBoundary fallbackTitle="Market Research Module Error" fallbackMessage="An error occurred while displaying the Market Research & Competitor Analysis module.">
+          <MarketResearchView
+            projectId={projectId}
+            research={marketResearch}
+            versions={researchVersions}
+            isLoading={loading}
+            onResearchUpdated={fetchProjectData}
+          />
+        </ErrorBoundary>
       )}
 
       {/* TAB: EXECUTION ROADMAP */}
       {activeTab === 'roadmap' && (
-        <RoadmapView
-          projectId={projectId}
-          roadmap={roadmap}
-          onRoadmapUpdated={fetchProjectData}
-        />
+        <ErrorBoundary fallbackTitle="Execution Roadmap Module Error" fallbackMessage="An error occurred while displaying the Execution Roadmap module.">
+          <RoadmapView
+            projectId={projectId}
+            roadmap={roadmap}
+            onRoadmapUpdated={fetchProjectData}
+          />
+        </ErrorBoundary>
       )}
 
       {/* TAB: BLUEPRINT COPILOT */}
       {activeTab === 'copilot' && (
-        <CopilotWorkspaceView
-          projectId={projectId}
-          onBlueprintModified={fetchProjectData}
-        />
+        <ErrorBoundary fallbackTitle="Blueprint Copilot Module Error" fallbackMessage="An error occurred while displaying the Blueprint Copilot module.">
+          <CopilotWorkspaceView
+            projectId={projectId}
+            onBlueprintModified={fetchProjectData}
+          />
+        </ErrorBoundary>
       )}
 
       {/* EDIT BMC BLOCK MODAL */}

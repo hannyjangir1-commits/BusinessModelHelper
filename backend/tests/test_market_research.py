@@ -112,18 +112,36 @@ def test_market_research_api_workflow(client):
 
         # 4. Fetch latest
         get_res = client.get(f"/api/projects/{proj_id}/market-research")
+        # Verify both content_json and computed fields content & sources are present
+        assert "content" in data
+        assert "content_json" in data
+        assert "sources" in data
+        assert isinstance(data["sources"], list)
+
+        # 4. Fetch latest via both standard and alias routes
+        get_res = client.get(f"/api/projects/{proj_id}/market-research")
         assert get_res.status_code == 200
         assert get_res.json()["data"]["version"] == 1
+        assert "content" in get_res.json()["data"]
+
+        # Alias route /research
+        alias_get = client.get(f"/api/projects/{proj_id}/research")
+        assert alias_get.status_code == 200
+        assert alias_get.json()["data"]["version"] == 1
 
         # 5. Generate version 2
         gen_v2 = client.post(f"/api/projects/{proj_id}/market-research/generate")
         assert gen_v2.status_code == 201
         assert gen_v2.json()["data"]["version"] == 2
 
-        # 6. List versions
+        # 6. List versions via both standard and alias routes
         vers_res = client.get(f"/api/projects/{proj_id}/market-research/versions")
         assert vers_res.status_code == 200
         assert len(vers_res.json()["data"]) == 2
+
+        alias_vers = client.get(f"/api/projects/{proj_id}/research/versions")
+        assert alias_vers.status_code == 200
+        assert len(alias_vers.json()["data"]) == 2
 
         # 7. Edit latest report content
         content["executive_summary"] = "Refined executive summary with founder field notes."
@@ -137,3 +155,47 @@ def test_market_research_api_workflow(client):
     finally:
         research_pipeline.GeminiAIClient = orig_client
         research_pipeline.get_research_provider = orig_provider_getter
+
+
+def test_market_research_empty_state_and_auth_regressions(client):
+    """Verify 404 on ungenerated research, 401 on unauthorized access, and structured error responses."""
+    # 1. Unauthenticated request must return 401
+    unauth_res = client.get("/api/projects/some-fake-id/market-research")
+    assert unauth_res.status_code == 401
+    assert unauth_res.json()["success"] is False
+
+    # 2. Register user to test empty project state
+    client.post(
+        "/api/auth/register",
+        json={
+            "username": "empty_researcher",
+            "email": "empty@example.com",
+            "password": "Password123!",
+            "confirm_password": "Password123!",
+            "display_name": "Empty Researcher",
+            "terms_accepted": True,
+            "privacy_acknowledged": True,
+        },
+    )
+
+    proj_res = client.post(
+        "/api/projects",
+        json={
+            "name": "Blank Venture",
+            "idea_description": "A new venture without research yet.",
+            "industry": "FinTech",
+            "business_stage": "idea",
+        },
+    )
+    proj_id = proj_res.json()["data"]["id"]
+
+    # 3. Getting research before generating must return 404
+    empty_res = client.get(f"/api/projects/{proj_id}/market-research")
+    assert empty_res.status_code == 404
+    assert empty_res.json()["success"] is False
+    assert "No market research report found" in empty_res.json()["error"]["message"]
+
+    # 4. Unknown API endpoint returns 404 JSON, not an HTML page
+    unknown_api_res = client.get("/api/projects/unknown-route/nonexistent")
+    assert unknown_api_res.status_code == 404
+    assert unknown_api_res.headers["content-type"].startswith("application/json")

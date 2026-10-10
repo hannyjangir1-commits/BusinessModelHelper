@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
 
 
 class GenerationRunResponse(BaseModel):
@@ -32,6 +32,18 @@ class BlueprintResponse(BaseModel):
     content_json: Dict[str, Any]
     created_at: datetime
     updated_at: datetime
+
+    @computed_field
+    @property
+    def content(self) -> Dict[str, Any]:
+        return self.content_json
+
+    @computed_field
+    @property
+    def sources(self) -> List[Any]:
+        if isinstance(self.content_json, dict):
+            return self.content_json.get("sources", [])
+        return []
 
     model_config = ConfigDict(from_attributes=True)
 

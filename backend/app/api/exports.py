@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models.blueprint import Blueprint
-from app.models.financial_model import FinancialModel
 from app.models.roadmap_task import RoadmapTask
 from app.models.user import User
 from app.services.pdf_service import generate_project_blueprint_pdf
@@ -47,13 +46,6 @@ def export_project_blueprint_pdf(
         .order_by(desc(Blueprint.version))
     ).scalars().first()
 
-    # Fetch latest financial model
-    fin_model = db.execute(
-        select(FinancialModel)
-        .where(FinancialModel.project_id == project_id)
-        .order_by(desc(FinancialModel.version))
-    ).scalars().first()
-
     # Fetch latest market research blueprint
     research_report = db.execute(
         select(Blueprint)
@@ -73,7 +65,6 @@ def export_project_blueprint_pdf(
         bmc_blueprint=bmc_bp,
         tech_blueprint=tech_bp,
         validator_report=val_report,
-        financial_model=fin_model,
         research_report=research_report,
         roadmap_tasks=roadmap_tasks,
     )

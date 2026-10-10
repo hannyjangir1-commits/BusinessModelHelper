@@ -15,7 +15,7 @@ class CopilotChatRequest(BaseModel):
     )
     target_module: Optional[str] = Field(
         default=None,
-        description="Target module if proposing edit: business_model, technology_stack, validation_report, financial_model, execution_roadmap",
+        description="Target module if proposing edit: business_model, technology_stack, validation_report, execution_roadmap",
     )
     target_section: Optional[str] = Field(
         default=None,

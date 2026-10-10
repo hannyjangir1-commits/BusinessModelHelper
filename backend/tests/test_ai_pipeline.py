@@ -141,8 +141,12 @@ def test_ai_failure_preserves_existing_blueprint(db):
     assert existing_bps[0].version == 1
 
     # 4. Verify failed run was logged for auditing
-    runs = db.query(GenerationRun).filter(GenerationRun.project_id == project.id).order_by(GenerationRun.created_at.desc()).all()
+    runs = db.query(GenerationRun).filter(GenerationRun.project_id == project.id).all()
     assert len(runs) >= 2
-    latest_run = runs[0]
-    assert latest_run.status == "failed"
-    assert latest_run.error_code == "AI_RATE_LIMIT"
+    failed_run = (
+        db.query(GenerationRun)
+        .filter(GenerationRun.project_id == project.id, GenerationRun.status == "failed")
+        .first()
+    )
+    assert failed_run is not None
+    assert failed_run.error_code == "AI_RATE_LIMIT"

@@ -233,12 +233,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
                     </Badge>
                   )}
 
-                  {project.has_financial_model && (
-                    <Badge variant="emerald" size="sm">
-                      Financials
-                    </Badge>
-                  )}
-
                   {project.has_market_research && (
                     <Badge variant="amber" size="sm">
                       Research

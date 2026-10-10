@@ -415,134 +415,13 @@ def generate_project_blueprint_pdf(
                 elements.append(Spacer(1, 3))
 
     # =========================================================================
-    # 5. Financial Projections Engine Section
-    # =========================================================================
-    if financial_model and getattr(financial_model, "projections_json", None):
-        elements.append(PageBreak())
-        fin_ver = getattr(financial_model, "version", 1)
-        elements.append(Paragraph(f"5. Financial Projections & Scenario Engine (Version {fin_ver})", h1_style))
-
-        proj = financial_model.projections_json
-        summ = proj.get("summary_metrics", {})
-        curr = financial_model.currency or "USD"
-
-        # KPI Summary cards table
-        kpi_data = [
-            [
-                Paragraph("<b>Break-Even Units</b>", meta_label),
-                Paragraph("<b>Break-Even Revenue</b>", meta_label),
-                Paragraph("<b>Startup Capital Req</b>", meta_label),
-                Paragraph("<b>Cash Runway</b>", meta_label),
-            ],
-            [
-                Paragraph(f"{summ.get('break_even_units', 'N/A')} units", h2_style),
-                Paragraph(f"{curr} {summ.get('break_even_revenue', 0.0):,.0f}", h2_style),
-                Paragraph(f"{curr} {summ.get('initial_capital_required', 0.0):,.0f}", h2_style),
-                Paragraph(f"{summ.get('runway_months', 0.0):.1f} mos", h2_style),
-            ],
-        ]
-        kpi_table = Table(kpi_data, colWidths=[126, 126, 126, 126])
-        kpi_table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
-            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-            ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ]))
-        elements.append(kpi_table)
-        elements.append(Spacer(1, 10))
-
-        # Monthly Forecast Table
-        monthly = proj.get("monthly_projections", [])
-        if monthly:
-            elements.append(Paragraph("12-Month Projections (Deterministic Python Calculations)", h2_style))
-            forecast_rows = [
-                [
-                    Paragraph("<b>Mo</b>", meta_label),
-                    Paragraph("<b>Units</b>", meta_label),
-                    Paragraph("<b>Revenue</b>", meta_label),
-                    Paragraph("<b>COGS</b>", meta_label),
-                    Paragraph("<b>Gross Profit</b>", meta_label),
-                    Paragraph("<b>Operating Exp</b>", meta_label),
-                    Paragraph("<b>Net Profit</b>", meta_label),
-                    Paragraph("<b>Closing Cash</b>", meta_label),
-                ]
-            ]
-            for m in monthly[:12]:
-                mo_num = m.get("month", 0)
-                u = m.get("units_sold", 0)
-                rev = m.get("revenue", 0.0)
-                cogs = m.get("cogs", 0.0)
-                gp = m.get("gross_profit", 0.0)
-                opex = m.get("operating_expenses", 0.0)
-                np = m.get("net_profit", 0.0)
-                cc = m.get("closing_cash", 0.0)
-                forecast_rows.append([
-                    Paragraph(f"M{mo_num}", body_style),
-                    Paragraph(f"{u:,}", body_style),
-                    Paragraph(f"{rev:,.0f}", body_style),
-                    Paragraph(f"{cogs:,.0f}", body_style),
-                    Paragraph(f"{gp:,.0f}", body_style),
-                    Paragraph(f"{opex:,.0f}", body_style),
-                    Paragraph(f"{np:,.0f}", body_style),
-                    Paragraph(f"{cc:,.0f}", body_style),
-                ])
-            forecast_table = Table(forecast_rows, colWidths=[28, 48, 68, 62, 68, 76, 76, 78])
-            forecast_table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
-                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-                ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
-                ("TOPPADDING", (0, 0), (-1, -1), 3),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-            ]))
-            elements.append(forecast_table)
-            elements.append(Spacer(1, 8))
-
-        # Scenario Comparisons
-        scenarios = financial_model.scenarios_json
-        if scenarios:
-            elements.append(Paragraph("Scenario Comparison (Sensitivity Modeling)", h2_style))
-            scen_rows = [
-                [
-                    Paragraph("<b>Scenario</b>", meta_label),
-                    Paragraph("<b>Monthly Growth</b>", meta_label),
-                    Paragraph("<b>Annual Revenue</b>", meta_label),
-                    Paragraph("<b>Annual Net Profit</b>", meta_label),
-                    Paragraph("<b>Breakeven Units</b>", meta_label),
-                ]
-            ]
-            for sc_name in ["conservative", "expected", "optimistic"]:
-                sc = scenarios.get(sc_name, {})
-                if sc:
-                    sc_summ = sc.get("summary_metrics", {})
-                    sc_assump = sc.get("assumptions", {})
-                    scen_rows.append([
-                        Paragraph(f"<b>{sc_name.capitalize()}</b>", body_style),
-                        Paragraph(f"{sc_assump.get('monthly_growth_rate', 0.0) * 100:.1f}%", body_style),
-                        Paragraph(f"{curr} {sc_summ.get('total_revenue_forecast', 0.0):,.0f}", body_style),
-                        Paragraph(f"{curr} {sc_summ.get('total_net_profit_forecast', 0.0):,.0f}", body_style),
-                        Paragraph(f"{sc_summ.get('break_even_units', 'N/A')}", body_style),
-                    ])
-            scen_table = Table(scen_rows, colWidths=[104, 95, 105, 105, 95])
-            scen_table.setStyle(TableStyle([
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
-                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-                ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
-                ("TOPPADDING", (0, 0), (-1, -1), 3),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-            ]))
-            elements.append(scen_table)
-            elements.append(Spacer(1, 8))
-
-    # =========================================================================
-    # 6. Market & Competitor Intelligence Section
+    # 5. Market & Competitor Intelligence Section
     # =========================================================================
     r_data = getattr(research_report, "content_json", None) or getattr(research_report, "report_json", None) if research_report else None
     if r_data:
         elements.append(PageBreak())
         res_ver = getattr(research_report, "version", 1)
-        elements.append(Paragraph(f"6. Market & Competitor Intelligence (Version {res_ver})", h1_style))
+        elements.append(Paragraph(f"5. Market & Competitor Intelligence (Version {res_ver})", h1_style))
 
         if "executive_summary" in r_data:
             elements.append(Paragraph(f"<b>Executive Market Overview:</b> {r_data['executive_summary']}", body_style))
@@ -597,11 +476,11 @@ def generate_project_blueprint_pdf(
             elements.append(Spacer(1, 8))
 
     # =========================================================================
-    # 7. Actionable Execution Roadmap Section
+    # 6. Actionable Execution Roadmap Section
     # =========================================================================
     if roadmap_tasks:
         elements.append(PageBreak())
-        elements.append(Paragraph("7. Actionable Execution Roadmap (30-60-90 Day)", h1_style))
+        elements.append(Paragraph("6. Actionable Execution Roadmap (30-60-90 Day)", h1_style))
         elements.append(Paragraph("Phased operational milestones to guide MVP buildout, founder validation, and distribution sprints.", body_style))
         elements.append(Spacer(1, 6))
 

@@ -13,6 +13,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { CreateProjectPage } from './pages/CreateProjectPage';
 import { ProjectDetailPage } from './pages/ProjectDetailPage';
 import { ProfilePage } from './pages/ProfilePage';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 
 const MainApp: React.FC = () => {
   const { user, loading } = useAuth();
@@ -67,7 +68,6 @@ const MainApp: React.FC = () => {
     // Auth Pages
     if (currentPath === '/login') {
       if (user) {
-        navigate('/dashboard');
         return <DashboardPage onNavigate={navigate} />;
       }
       return <LoginPage onNavigate={navigate} />;
@@ -75,7 +75,6 @@ const MainApp: React.FC = () => {
 
     if (currentPath === '/register') {
       if (user) {
-        navigate('/dashboard');
         return <DashboardPage onNavigate={navigate} />;
       }
       return <RegisterPage onNavigate={navigate} />;
@@ -83,25 +82,33 @@ const MainApp: React.FC = () => {
 
     // Authenticated Project Pages
     if (currentPath.startsWith('/projects/')) {
-      const rest = currentPath.replace('/projects/', '');
-      if (rest === 'new') {
-        if (!user) {
-          navigate('/login');
-          return <LoginPage onNavigate={navigate} />;
-        }
-        return <CreateProjectPage onNavigate={navigate} />;
-      }
       if (!user) {
-        navigate('/login');
         return <LoginPage onNavigate={navigate} />;
       }
-      return <ProjectDetailPage projectId={rest} onNavigate={navigate} />;
+
+      const raw = currentPath.replace('/projects/', '').split('?')[0].replace(/\/$/, '');
+      if (raw === 'new') {
+        return <CreateProjectPage onNavigate={navigate} />;
+      }
+
+      // Parse projectId and optional sub-path tab: e.g. /projects/:id or /projects/:id/:tab
+      const parts = raw.split('/');
+      const projectId = parts[0];
+      const initialTab = parts[1] || undefined;
+
+      return (
+        <ErrorBoundary
+          fallbackTitle="Project Workspace Error"
+          fallbackMessage="An unexpected error occurred while loading this project workspace."
+        >
+          <ProjectDetailPage projectId={projectId} initialTab={initialTab} onNavigate={navigate} />
+        </ErrorBoundary>
+      );
     }
 
     // Dashboard
     if (currentPath === '/dashboard') {
       if (!user) {
-        navigate('/login');
         return <LoginPage onNavigate={navigate} />;
       }
       return <DashboardPage onNavigate={navigate} />;
@@ -110,7 +117,6 @@ const MainApp: React.FC = () => {
     // Profile & Settings
     if (currentPath === '/profile') {
       if (!user) {
-        navigate('/login');
         return <LoginPage onNavigate={navigate} />;
       }
       return <ProfilePage onNavigate={navigate} />;
@@ -126,7 +132,14 @@ const MainApp: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
       <Navbar currentPath={currentPath} onNavigate={navigate} />
-      <main className="flex-1">{renderRoute()}</main>
+      <main className="flex-1">
+        <ErrorBoundary
+          fallbackTitle="Application Display Error"
+          fallbackMessage="An unexpected error occurred while displaying this page."
+        >
+          {renderRoute()}
+        </ErrorBoundary>
+      </main>
       <Footer onNavigate={navigate} />
     </div>
   );

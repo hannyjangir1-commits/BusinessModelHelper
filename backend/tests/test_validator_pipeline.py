@@ -89,6 +89,14 @@ def test_validation_report_api_and_versioning(client, db):
         assert bp_data["version"] == 1
         assert bp_data["module_type"] == "validation_report"
         assert "swot_analysis" in bp_data["content_json"]
+        
+        # Verify interview_questions are returned as structured objects with question_text & focus_category
+        interview_qs = bp_data["content_json"]["interview_questions"]
+        assert len(interview_qs) > 0
+        assert isinstance(interview_qs[0], dict)
+        assert "question_text" in interview_qs[0]
+        assert "focus_category" in interview_qs[0]
+        assert len(interview_qs[0]["question_text"]) > 0
 
         # 4a. Fetch latest report via /validator
         get_res = client.get(f"/api/projects/{proj_id}/validator")

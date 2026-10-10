@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
+  Compass,
   HelpCircle,
   Lightbulb,
   RefreshCw,
@@ -11,11 +12,117 @@ import {
   Zap,
 } from 'lucide-react';
 import { api } from '../../services/api';
-import { BlueprintVersionItem, ValidationReportData, ValidationReportResponse } from '../../types';
+import {
+  BlueprintVersionItem,
+  CustomerInterviewQuestion,
+  InterviewQuestionItem,
+  ValidationExperiment,
+  ValidationReportData,
+  ValidationReportResponse,
+} from '../../types';
+import { safeText, normalizeValidationReportData } from '../../utils/validator';
 import { Button } from '../ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Alert } from '../ui/Alert';
+
+interface QuestionCardProps {
+  question: InterviewQuestionItem;
+  index: number;
+}
+
+export const ValidationQuestionCard: React.FC<QuestionCardProps> = ({ question, index }) => {
+  const isObj = typeof question === 'object' && question !== null;
+  const questionText = isObj
+    ? (question as CustomerInterviewQuestion).question_text || (question as any).question || (question as any).text || ''
+    : String(question || '');
+  const focusCategory = isObj
+    ? (question as CustomerInterviewQuestion).focus_category || (question as any).category || (question as any).focus
+    : undefined;
+  const rationale = isObj
+    ? (question as CustomerInterviewQuestion).rationale || (question as any).reasoning || (question as any).why
+    : undefined;
+
+  const getBadgeVariant = (cat?: string): 'indigo' | 'amber' | 'rose' | 'emerald' | 'slate' => {
+    if (!cat) return 'slate';
+    const lower = cat.toLowerCase();
+    if (lower.includes('past') || lower.includes('behavior')) return 'indigo';
+    if (lower.includes('friction') || lower.includes('pain')) return 'rose';
+    if (lower.includes('budget') || lower.includes('pay') || lower.includes('price')) return 'emerald';
+    if (lower.includes('workaround') || lower.includes('current')) return 'amber';
+    return 'slate';
+  };
+
+  return (
+    <div className="p-3.5 rounded-xl bg-slate-50/80 border border-slate-200/80 space-y-1.5 transition-all hover:bg-white hover:border-slate-300">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-2.5">
+          <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[11px] font-bold shrink-0 mt-0.5">
+            {index + 1}
+          </span>
+          <p className="font-medium text-slate-800 text-xs leading-relaxed">
+            {questionText || 'Unspecified validation inquiry'}
+          </p>
+        </div>
+        {focusCategory && (
+          <Badge variant={getBadgeVariant(focusCategory)} size="sm" className="shrink-0 font-medium">
+            {focusCategory}
+          </Badge>
+        )}
+      </div>
+      {rationale && (
+        <p className="text-[11px] text-slate-500 pl-7 italic">
+          <span className="font-semibold text-slate-600 not-italic">Rationale:</span> {rationale}
+        </p>
+      )}
+    </div>
+  );
+};
+
+interface ExperimentCardProps {
+  experiment: ValidationExperiment;
+  index: number;
+}
+
+export const ValidationExperimentCard: React.FC<ExperimentCardProps> = ({ experiment, index }) => {
+  return (
+    <div className="border border-slate-200 rounded-xl p-3.5 space-y-2 bg-slate-50/50 hover:bg-white transition-all hover:border-slate-300">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold shrink-0">
+            {index + 1}
+          </span>
+          <h4 className="font-bold text-sm text-slate-900">{safeText(experiment.experiment_name, 'Validation Experiment')}</h4>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+          {experiment.experiment_type && <Badge variant="indigo" size="sm">{safeText(experiment.experiment_type)}</Badge>}
+          {experiment.estimated_duration && <Badge variant="slate" size="sm">{safeText(experiment.estimated_duration)}</Badge>}
+          {experiment.estimated_cost && <Badge variant="emerald" size="sm">{safeText(experiment.estimated_cost)}</Badge>}
+        </div>
+      </div>
+      {experiment.hypothesis && (
+        <p className="text-xs text-slate-600">
+          <strong className="text-slate-800">Hypothesis:</strong> {safeText(experiment.hypothesis)}
+        </p>
+      )}
+      {experiment.target_audience && (
+        <p className="text-[11px] text-slate-500">
+          <strong className="text-slate-700">Target Cohort:</strong> {safeText(experiment.target_audience)}
+        </p>
+      )}
+      {experiment.procedure && (
+        <p className="text-[11px] text-slate-500">
+          <strong className="text-slate-700">Procedure:</strong> {safeText(experiment.procedure)}
+        </p>
+      )}
+      {experiment.success_criteria && (
+        <div className="text-xs text-slate-700 pt-1.5 border-t border-slate-200/60">
+          <span className="font-semibold text-slate-900">Success Criteria:</span> {safeText(experiment.success_criteria)}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface IdeaValidatorViewProps {
   projectId: string;
@@ -61,7 +168,9 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
     }
   };
 
-  const data: ValidationReportData | null = report?.content_json || report?.content || null;
+  // Safely normalize raw content from backend
+  const rawData = report?.content_json || report?.content || null;
+  const data: ValidationReportData | null = rawData ? normalizeValidationReportData(rawData) : null;
 
   if (!report || !data) {
     return (
@@ -103,7 +212,7 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
               <Badge variant="amber">Version {report.version}</Badge>
             </div>
             <p className="text-xs text-slate-500">
-              Evaluated {new Date(report.created_at).toLocaleDateString()} with deterministic risk heuristics
+              Evaluated {report.created_at ? new Date(report.created_at).toLocaleDateString() : 'recently'} with deterministic risk heuristics
             </p>
           </div>
         </div>
@@ -116,8 +225,8 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
               className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             >
               {versions.map((v) => (
-                <option key={v.id} value={v.version}>
-                  Version {v.version} ({new Date(v.created_at).toLocaleDateString()})
+                <option key={v.id || v.version} value={v.version}>
+                  Version {v.version} ({v.created_at ? new Date(v.created_at).toLocaleDateString() : 'Saved'})
                 </option>
               ))}
             </select>
@@ -146,12 +255,20 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
             <div className="p-3 bg-indigo-100 text-indigo-700 rounded-xl">
               <Zap className="w-5 h-5" />
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 w-full">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-indigo-700">Readiness Assessment</span>
-                <Badge variant="indigo">{data.summary?.qualitative_readiness_assessment || 'In Progress'}</Badge>
+                <Badge variant="indigo">{safeText(data.summary?.qualitative_readiness_assessment, 'In Progress')}</Badge>
               </div>
-              <p className="text-sm text-slate-700 leading-relaxed">{data.overview}</p>
+              <p className="text-sm text-slate-700 leading-relaxed">{safeText(data.overview)}</p>
+              {data.summary?.strongest_supporting_evidence && (
+                <p className="text-xs text-slate-600 pt-2 border-t border-indigo-100/60">
+                  <strong className="text-indigo-900">Strongest Supporting Evidence:</strong>{' '}
+                  {Array.isArray(data.summary.strongest_supporting_evidence)
+                    ? data.summary.strongest_supporting_evidence.map((ev) => safeText(ev)).join('; ')
+                    : safeText(data.summary.strongest_supporting_evidence)}
+                </p>
+              )}
             </div>
           </div>
         </CardContent>
@@ -168,26 +285,28 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
           <CardContent className="space-y-3 text-sm">
             <div>
               <span className="text-xs font-semibold text-slate-500 uppercase">Core Problem</span>
-              <p className="text-slate-800 font-medium mt-0.5">{data.problem_solution_fit?.problem_statement}</p>
+              <p className="text-slate-800 font-medium mt-0.5">{safeText(data.problem_solution_fit?.problem_statement)}</p>
             </div>
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
               <div>
                 <span className="text-xs font-semibold text-slate-500 uppercase">Who Experiences It</span>
-                <p className="text-xs text-slate-700 mt-0.5">{data.problem_solution_fit?.who_experiences_it}</p>
+                <p className="text-xs text-slate-700 mt-0.5">{safeText(data.problem_solution_fit?.who_experiences_it)}</p>
               </div>
               <div>
                 <span className="text-xs font-semibold text-slate-500 uppercase">Severity / Frequency</span>
-                <p className="text-xs text-slate-700 mt-0.5">{data.problem_solution_fit?.frequency_and_severity}</p>
+                <p className="text-xs text-slate-700 mt-0.5">{safeText(data.problem_solution_fit?.frequency_and_severity)}</p>
               </div>
             </div>
-            <div className="pt-2 border-t border-slate-100">
-              <span className="text-xs font-semibold text-slate-500 uppercase">Existing Alternatives</span>
-              <div className="flex flex-wrap gap-1.5 mt-1">
-                {data.problem_solution_fit?.existing_alternatives?.map((alt, i) => (
-                  <Badge key={i} variant="slate" size="sm">{alt}</Badge>
-                ))}
+            {data.problem_solution_fit?.existing_alternatives && data.problem_solution_fit.existing_alternatives.length > 0 && (
+              <div className="pt-2 border-t border-slate-100">
+                <span className="text-xs font-semibold text-slate-500 uppercase">Existing Alternatives</span>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {data.problem_solution_fit.existing_alternatives.map((alt, i) => (
+                    <Badge key={`alt-${i}`} variant="slate" size="sm">{safeText(alt)}</Badge>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 
@@ -200,33 +319,76 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
           <CardContent className="space-y-3 text-sm">
             <div>
               <span className="text-xs font-semibold text-slate-500 uppercase">Primary Segment</span>
-              <p className="text-slate-800 font-medium mt-0.5">{data.target_customer_clarity?.primary_segment}</p>
+              <p className="text-slate-800 font-medium mt-0.5">{safeText(data.target_customer_clarity?.primary_segment)}</p>
             </div>
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100">
               <div>
                 <span className="text-xs font-semibold text-slate-500 uppercase">Buyer vs End User</span>
-                <p className="text-xs text-slate-700 mt-0.5">{data.target_customer_clarity?.buyer_vs_end_user}</p>
+                <p className="text-xs text-slate-700 mt-0.5">{safeText(data.target_customer_clarity?.buyer_vs_end_user)}</p>
               </div>
               <div>
                 <span className="text-xs font-semibold text-slate-500 uppercase">Adoption Barriers</span>
                 <ul className="text-xs text-slate-700 list-disc list-inside mt-0.5">
-                  {data.target_customer_clarity?.adoption_barriers?.slice(0, 2).map((b, i) => (
-                    <li key={i}>{b}</li>
+                  {data.target_customer_clarity?.adoption_barriers?.slice(0, 3).map((b, i) => (
+                    <li key={`b-${i}`}>{safeText(b)}</li>
                   ))}
                 </ul>
               </div>
             </div>
-            <div className="pt-2 border-t border-slate-100">
-              <span className="text-xs font-semibold text-slate-500 uppercase">Unvalidated Assumptions</span>
-              <ul className="text-xs text-amber-800 list-disc list-inside mt-1">
-                {data.target_customer_clarity?.unvalidated_assumptions?.slice(0, 2).map((a, i) => (
-                  <li key={i}>{a}</li>
-                ))}
-              </ul>
-            </div>
+            {data.target_customer_clarity?.unvalidated_assumptions && data.target_customer_clarity.unvalidated_assumptions.length > 0 && (
+              <div className="pt-2 border-t border-slate-100">
+                <span className="text-xs font-semibold text-slate-500 uppercase">Unvalidated Assumptions</span>
+                <ul className="text-xs text-amber-800 list-disc list-inside mt-1">
+                  {data.target_customer_clarity.unvalidated_assumptions.slice(0, 3).map((a, i) => (
+                    <li key={`a-${i}`}>{safeText(a)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
+
+      {/* Value Proposition Assessment (if present) */}
+      {data.value_proposition_assessment && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Compass className="w-4 h-4 text-indigo-600" /> Value Proposition & Differentiation
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {data.value_proposition_assessment.core_benefit && (
+              <div>
+                <span className="text-xs font-semibold text-slate-500 uppercase">Core Benefit Delivered</span>
+                <p className="text-slate-800 font-medium mt-0.5">{safeText(data.value_proposition_assessment.core_benefit)}</p>
+              </div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+              {data.value_proposition_assessment.differentiation_hypotheses && data.value_proposition_assessment.differentiation_hypotheses.length > 0 && (
+                <div>
+                  <span className="text-xs font-semibold text-slate-500 uppercase">Differentiation Hypotheses</span>
+                  <ul className="text-xs text-slate-700 list-disc list-inside mt-1 space-y-0.5">
+                    {data.value_proposition_assessment.differentiation_hypotheses.map((d, i) => (
+                      <li key={`d-${i}`}>{safeText(d)}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {data.value_proposition_assessment.potential_weaknesses && data.value_proposition_assessment.potential_weaknesses.length > 0 && (
+                <div>
+                  <span className="text-xs font-semibold text-slate-500 uppercase">Potential Weaknesses</span>
+                  <ul className="text-xs text-rose-800 list-disc list-inside mt-1 space-y-0.5">
+                    {data.value_proposition_assessment.potential_weaknesses.map((w, i) => (
+                      <li key={`pw-${i}`}>{safeText(w)}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* SWOT Quadrant Matrix */}
       <Card>
@@ -243,9 +405,9 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
               </div>
               <ul className="space-y-1.5 text-xs text-emerald-950">
                 {data.swot_analysis?.strengths?.map((s, i) => (
-                  <li key={i} className="flex items-start gap-1.5">
+                  <li key={`s-${i}`} className="flex items-start gap-1.5">
                     <span className="text-emerald-500 font-bold">•</span>
-                    <span>{s}</span>
+                    <span>{safeText(s)}</span>
                   </li>
                 ))}
               </ul>
@@ -259,9 +421,9 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
               </div>
               <ul className="space-y-1.5 text-xs text-amber-950">
                 {data.swot_analysis?.weaknesses?.map((w, i) => (
-                  <li key={i} className="flex items-start gap-1.5">
+                  <li key={`w-${i}`} className="flex items-start gap-1.5">
                     <span className="text-amber-500 font-bold">•</span>
-                    <span>{w}</span>
+                    <span>{safeText(w)}</span>
                   </li>
                 ))}
               </ul>
@@ -275,9 +437,9 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
               </div>
               <ul className="space-y-1.5 text-xs text-sky-950">
                 {data.swot_analysis?.opportunities?.map((o, i) => (
-                  <li key={i} className="flex items-start gap-1.5">
+                  <li key={`o-${i}`} className="flex items-start gap-1.5">
                     <span className="text-sky-500 font-bold">•</span>
-                    <span>{o}</span>
+                    <span>{safeText(o)}</span>
                   </li>
                 ))}
               </ul>
@@ -291,9 +453,9 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
               </div>
               <ul className="space-y-1.5 text-xs text-rose-950">
                 {data.swot_analysis?.threats?.map((t, i) => (
-                  <li key={i} className="flex items-start gap-1.5">
+                  <li key={`t-${i}`} className="flex items-start gap-1.5">
                     <span className="text-rose-500 font-bold">•</span>
-                    <span>{t}</span>
+                    <span>{safeText(t)}</span>
                   </li>
                 ))}
               </ul>
@@ -324,21 +486,21 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {data.business_risks?.map((risk, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/50">
-                    <td className="py-2.5 px-3 font-semibold text-slate-800 whitespace-nowrap">{risk.category}</td>
-                    <td className="py-2.5 px-3 text-slate-700 min-w-[200px]">{risk.description}</td>
+                  <tr key={`risk-${idx}`} className="hover:bg-slate-50/50">
+                    <td className="py-2.5 px-3 font-semibold text-slate-800 whitespace-nowrap">{safeText(risk.category, 'General')}</td>
+                    <td className="py-2.5 px-3 text-slate-700 min-w-[200px]">{safeText(risk.description)}</td>
                     <td className="py-2.5 px-2 whitespace-nowrap">
                       <Badge variant={risk.likelihood === 'High' ? 'rose' : risk.likelihood === 'Medium' ? 'amber' : 'slate'} size="sm">
-                        {risk.likelihood}
+                        {safeText(risk.likelihood, 'Medium')}
                       </Badge>
                     </td>
                     <td className="py-2.5 px-2 whitespace-nowrap">
                       <Badge variant={risk.impact === 'High' ? 'rose' : risk.impact === 'Medium' ? 'amber' : 'slate'} size="sm">
-                        {risk.impact}
+                        {safeText(risk.impact, 'Medium')}
                       </Badge>
                     </td>
-                    <td className="py-2.5 px-3 text-slate-600 min-w-[200px]">{risk.suggested_mitigation}</td>
-                    <td className="py-2.5 px-3 text-indigo-700 font-medium min-w-[180px]">{risk.recommended_next_action}</td>
+                    <td className="py-2.5 px-3 text-slate-600 min-w-[200px]">{safeText(risk.suggested_mitigation)}</td>
+                    <td className="py-2.5 px-3 text-indigo-700 font-medium min-w-[180px]">{safeText(risk.recommended_next_action)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -356,21 +518,13 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {data.validation_experiments?.map((exp, i) => (
-              <div key={i} className="border border-slate-200 rounded-xl p-3.5 space-y-2 bg-slate-50/50">
-                <div className="flex items-center justify-between gap-2">
-                  <h4 className="font-bold text-sm text-slate-900">{exp.experiment_name}</h4>
-                  <div className="flex items-center gap-1.5">
-                    <Badge variant="indigo" size="sm">{exp.experiment_type}</Badge>
-                    <Badge variant="slate" size="sm">{exp.estimated_duration}</Badge>
-                  </div>
-                </div>
-                <p className="text-xs text-slate-600"><strong>Hypothesis:</strong> {exp.hypothesis}</p>
-                <div className="text-xs text-slate-700 pt-1.5 border-t border-slate-200/60">
-                  <span className="font-semibold text-slate-900">Success Criteria:</span> {exp.success_criteria}
-                </div>
-              </div>
-            ))}
+            {data.validation_experiments && data.validation_experiments.length > 0 ? (
+              data.validation_experiments.map((exp, i) => (
+                <ValidationExperimentCard key={`exp-${i}`} experiment={exp} index={i} />
+              ))
+            ) : (
+              <p className="text-xs text-slate-400 italic">No validation experiments configured.</p>
+            )}
           </CardContent>
         </Card>
 
@@ -384,13 +538,15 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
             <p className="text-xs text-slate-500 mb-3">
               Non-leading inquiries focusing on past behavior and current workarounds rather than speculative praise:
             </p>
-            <ol className="space-y-2.5 text-xs text-slate-800 list-decimal list-inside">
-              {data.interview_questions?.map((q, idx) => (
-                <li key={idx} className="p-2 rounded-lg bg-slate-50 border border-slate-100 font-medium">
-                  {q}
-                </li>
-              ))}
-            </ol>
+            <div className="space-y-2.5">
+              {data.interview_questions && data.interview_questions.length > 0 ? (
+                data.interview_questions.map((q, idx) => (
+                  <ValidationQuestionCard key={`q-${idx}`} question={q} index={idx} />
+                ))
+              ) : (
+                <p className="text-xs text-slate-400 italic">No discovery interview questions generated yet.</p>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>

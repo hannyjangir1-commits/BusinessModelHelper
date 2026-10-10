@@ -11,8 +11,6 @@ import {
   CopilotChatResponse,
   CopilotProposal,
   CopilotRevisionItem,
-  FinancialAssumptions,
-  FinancialModelResponse,
   GenerationRun,
   MarketResearchResponse,
   PaginatedResponse,
@@ -21,6 +19,7 @@ import {
   RoadmapTask,
   TechnologyStackData,
   User,
+  ValidationReportData,
   ValidationReportResponse,
 } from '../types';
 
@@ -29,6 +28,9 @@ let currentCsrfToken: string | null = null;
 export function setCsrfToken(token: string | null) {
   currentCsrfToken = token;
 }
+
+import { normalizeValidationReportData } from '../utils/validator';
+export { normalizeValidationReportData };
 
 export function getCsrfToken(): string | null {
   return currentCsrfToken;
@@ -286,7 +288,12 @@ export const api = {
       const res = await request<ApiResponse<ValidationReportResponse>>(`/api/projects/${projectId}/validator/generate`, {
         method: 'POST',
       });
-      return res.data!;
+      const data = res.data!;
+      if (data) {
+        if (data.content_json) data.content_json = normalizeValidationReportData(data.content_json)!;
+        if (data.content) data.content = normalizeValidationReportData(data.content)!;
+      }
+      return data;
     },
 
     async get(projectId: string, version?: number): Promise<ValidationReportResponse> {
@@ -294,50 +301,16 @@ export const api = {
       const res = await request<ApiResponse<ValidationReportResponse>>(`/api/projects/${projectId}/validator${qs}`, {
         method: 'GET',
       });
-      return res.data!;
+      const data = res.data!;
+      if (data) {
+        if (data.content_json) data.content_json = normalizeValidationReportData(data.content_json)!;
+        if (data.content) data.content = normalizeValidationReportData(data.content)!;
+      }
+      return data;
     },
 
     async listVersions(projectId: string): Promise<BlueprintVersionItem[]> {
       const res = await request<ApiResponse<BlueprintVersionItem[]>>(`/api/projects/${projectId}/validator/versions`, {
-        method: 'GET',
-      });
-      return res.data || [];
-    },
-  },
-
-  financial: {
-    async get(projectId: string, version?: number): Promise<FinancialModelResponse> {
-      const qs = version ? `?version=${version}` : '';
-      const res = await request<ApiResponse<FinancialModelResponse>>(`/api/projects/${projectId}/financial${qs}`, {
-        method: 'GET',
-      });
-      return res.data!;
-    },
-
-    async save(projectId: string, assumptions: Partial<FinancialAssumptions>): Promise<FinancialModelResponse> {
-      const res = await request<ApiResponse<FinancialModelResponse>>(`/api/projects/${projectId}/financial`, {
-        method: 'POST',
-        body: JSON.stringify({
-          name: 'Base Financial Plan',
-          assumptions,
-        }),
-      });
-      return res.data!;
-    },
-
-    async calculate(projectId: string, assumptions: Partial<FinancialAssumptions>): Promise<FinancialModelResponse> {
-      const res = await request<ApiResponse<FinancialModelResponse>>(`/api/projects/${projectId}/financial/calculate`, {
-        method: 'POST',
-        body: JSON.stringify({
-          assumptions,
-          include_scenarios: true,
-        }),
-      });
-      return res.data!;
-    },
-
-    async listVersions(projectId: string): Promise<any[]> {
-      const res = await request<ApiResponse<any[]>>(`/api/projects/${projectId}/financial/versions`, {
         method: 'GET',
       });
       return res.data || [];

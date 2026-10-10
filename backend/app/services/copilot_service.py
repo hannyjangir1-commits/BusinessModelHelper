@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.blueprint import Blueprint
 from app.models.copilot_revision import CopilotRevision
-from app.models.financial_model import FinancialModel
 from app.models.project import Project
 from app.models.roadmap_task import RoadmapTask
 from app.models.user import User
@@ -61,22 +60,6 @@ def build_copilot_context_summary(db: Session, project: Project) -> str:
         lines.append(f"Technology Stack (v{tech.version}): Available")
         lines.append(f"  Architecture Philosophy: {tech.content_json.get('architecture_summary', '')}")
         lines.append(f"  Estimated Monthly Launch Cost: {tech.content_json.get('estimated_monthly_infrastructure_total', '')}")
-
-    # Financial Summary
-    fin = (
-        db.query(FinancialModel)
-        .filter(FinancialModel.project_id == project.id)
-        .order_by(FinancialModel.version.desc())
-        .first()
-    )
-    if fin and fin.projections_json:
-        sum_data = fin.projections_json.get("summary", {})
-        be_data = fin.projections_json.get("break_even", {})
-        lines.append(f"Financial Model (v{fin.version}): Available")
-        lines.append(f"  Total Revenue: {sum_data.get('total_revenue', '')}")
-        lines.append(f"  Ending Cash: {sum_data.get('ending_cash_balance', '')}")
-        lines.append(f"  Runway: {sum_data.get('estimated_runway_months', 'Profitable')}")
-        lines.append(f"  Break-Even Units/Month: {be_data.get('break_even_units_per_month', 'N/A')}")
 
     # Roadmap Summary
     task_count = db.query(RoadmapTask).filter(RoadmapTask.project_id == project.id).count()
@@ -203,15 +186,6 @@ Founder Question:
             )
             if tech and tech.content_json:
                 previous_content = tech.content_json.get(target_sec, {})
-        elif target_mod == "financial_model":
-            fin = (
-                db.query(FinancialModel)
-                .filter(FinancialModel.project_id == project.id)
-                .order_by(FinancialModel.version.desc())
-                .first()
-            )
-            if fin:
-                previous_content = fin.assumptions_json
 
         system_instruction = (
             "You are a strict, structured AI Code & Business Blueprint Editor. "
@@ -340,22 +314,6 @@ def accept_copilot_proposal(
             updated_json[rev.target_section] = rev.proposal_content
             tech.content_json = updated_json
             tech.updated_at = datetime.now(timezone.utc)
-
-    elif rev.target_module == "financial_model":
-        fin = (
-            db.query(FinancialModel)
-            .filter(FinancialModel.project_id == project_id)
-            .order_by(FinancialModel.version.desc())
-            .first()
-        )
-        if fin and isinstance(rev.proposal_content, dict):
-            # Update matching assumptions
-            current_assump = dict(fin.assumptions_json)
-            for k, v in rev.proposal_content.items():
-                if k in current_assump:
-                    current_assump[k] = v
-            fin.assumptions_json = current_assump
-            fin.updated_at = datetime.now(timezone.utc)
 
     # Mark proposal accepted
     rev.status = "accepted"

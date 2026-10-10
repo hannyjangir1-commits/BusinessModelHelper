@@ -42,7 +42,7 @@ export const CopilotWorkspaceView: React.FC<CopilotWorkspaceViewProps> = ({
     {
       id: 'welcome',
       sender: 'copilot',
-      text: "Hello! I am your AI Business Architect Copilot. I have full read access to your saved business model, tech stack, financial assumptions, and validation reports. Ask me questions or instruct me to propose targeted refinements to any section.",
+      text: "Hello! I am your AI Business Architect Copilot. I have full read access to your saved business model, tech stack, and validation reports. Ask me questions or instruct me to propose targeted refinements to any section.",
       timestamp: new Date().toLocaleTimeString(),
     },
   ]);
@@ -329,7 +329,6 @@ export const CopilotWorkspaceView: React.FC<CopilotWorkspaceViewProps> = ({
                   >
                     <option value="business_model">Business Model</option>
                     <option value="technology_stack">Technology Stack</option>
-                    <option value="financial_model">Financial Assumptions</option>
                   </select>
 
                   <select
