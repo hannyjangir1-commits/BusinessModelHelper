@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import check_generation_rate_limit, get_current_user
 from app.models.user import User
 from app.schemas.common import ApiResponse
 from app.schemas.copilot import (
@@ -29,6 +29,7 @@ def copilot_chat(
     project_id: str,
     req: CopilotChatRequest,
     current_user: User = Depends(get_current_user),
+    _: None = Depends(check_generation_rate_limit),
     db: Session = Depends(get_db),
 ) -> ApiResponse[CopilotChatResponse]:
     """Interact with Business Blueprint Copilot (ask strategic questions or propose section edits)."""

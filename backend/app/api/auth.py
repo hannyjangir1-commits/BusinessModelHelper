@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.sessions import clear_session_cookie, set_session_cookie
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, get_current_user_and_session
 from app.models.user import User
 from app.schemas.auth import (
     AuthResponse,
@@ -71,10 +71,17 @@ def logout(response: Response) -> ApiResponse[dict]:
 
 @router.get("/me", response_model=ApiResponse[UserResponse])
 def get_current_authenticated_user(
-    current_user: User = Depends(get_current_user),
+    response: Response,
+    auth_data: tuple[User, dict] = Depends(get_current_user_and_session),
 ) -> ApiResponse[UserResponse]:
-    """Retrieve details of currently authenticated user."""
-    return ApiResponse(data=UserResponse.model_validate(current_user))
+    """Retrieve details of currently authenticated user and refresh CSRF token."""
+    user, payload = auth_data
+    csrf_val = payload.get("csrf_token")
+    if csrf_val:
+        response.headers["X-CSRF-Token"] = csrf_val
+    user_data = UserResponse.model_validate(user)
+    user_data.csrf_token = csrf_val
+    return ApiResponse(data=user_data)
 
 
 @router.post("/change-password", response_model=ApiResponse[dict])

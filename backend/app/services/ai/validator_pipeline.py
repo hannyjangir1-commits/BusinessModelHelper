@@ -227,7 +227,7 @@ def generate_validation_report(
 ) -> Tuple[Blueprint, List[str]]:
     """Execute end-to-end Idea Validation generation with versioning and audit tracking."""
     ai_client = client or GeminiAIClient()
-    model_name = getattr(ai_client, "model", "gemini-2.5-flash")
+    model_name = getattr(ai_client, "model", "gemini-3.5-flash-lite")
 
     # 1. Audit generation run record
     run = GenerationRun(

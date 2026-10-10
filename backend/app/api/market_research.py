@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFoundError
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import check_generation_rate_limit, get_current_user
 from app.models.blueprint import Blueprint
 from app.models.user import User
 from app.schemas.common import ApiResponse
@@ -25,6 +25,7 @@ router = APIRouter(tags=["Market Research"])
 def generate_research(
     project_id: str,
     current_user: User = Depends(get_current_user),
+    _: None = Depends(check_generation_rate_limit),
     db: Session = Depends(get_db),
 ) -> ApiResponse[BlueprintResponse]:
     """Execute live market and competitor research with verified source citations."""

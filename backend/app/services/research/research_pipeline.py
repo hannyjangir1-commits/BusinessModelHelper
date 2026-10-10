@@ -206,7 +206,7 @@ def generate_market_research_report(
 ) -> Tuple[Blueprint, List[str]]:
     """Execute end-to-end Market & Competitor Research workflow."""
     ai_client = client or GeminiAIClient()
-    model_name = getattr(ai_client, "model", "gemini-2.5-flash")
+    model_name = getattr(ai_client, "model", "gemini-3.5-flash-lite")
     provider = search_provider or get_research_provider()
 
     # 1. Audit generation run record

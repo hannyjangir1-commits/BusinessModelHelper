@@ -199,7 +199,7 @@ def generate_execution_roadmap(
 ) -> Tuple[Blueprint, List[str]]:
     """Generate roadmap tasks via AI, validate DAG, clear old tasks, and persist both rows and blueprint snapshot."""
     ai_client = client or GeminiAIClient()
-    model_name = getattr(ai_client, "model", "gemini-2.5-flash")
+    model_name = getattr(ai_client, "model", "gemini-3.5-flash-lite")
 
     # 1. Audit generation run record
     run = GenerationRun(

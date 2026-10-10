@@ -40,6 +40,7 @@ class SlidingWindowRateLimiter:
             self._requests.pop(key, None)
 
 
-# Global instances for login and registration rate limiting
+# Global instances for login, registration, and AI generation rate limiting
 login_rate_limiter = SlidingWindowRateLimiter()
 registration_rate_limiter = SlidingWindowRateLimiter()
+generation_rate_limiter = SlidingWindowRateLimiter()

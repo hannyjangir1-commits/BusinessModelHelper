@@ -77,6 +77,7 @@ class UserResponse(BaseModel):
     updated_at: datetime
     last_login_at: Optional[datetime] = None
     is_active: bool
+    csrf_token: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

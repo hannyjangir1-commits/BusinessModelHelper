@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 from typing import List
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -66,6 +66,15 @@ class Settings(BaseSettings):
         if val not in allowed:
             return "development"
         return val
+
+    @model_validator(mode="after")
+    def validate_production_security(self) -> "Settings":
+        if self.app_env.lower() == "production":
+            if not self.secret_key or "insecure" in self.secret_key.lower() or "development" in self.secret_key.lower():
+                raise ValueError("In production, SECRET_KEY must be a cryptographically secure key and not the default development secret.")
+            if not self.gemini_api_key or not self.gemini_api_key.strip():
+                raise ValueError("In production, GEMINI_API_KEY must be configured.")
+        return self
 
     @property
     def is_production(self) -> bool:

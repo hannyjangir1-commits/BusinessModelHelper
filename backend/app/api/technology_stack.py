@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import NotFoundError
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import check_generation_rate_limit, get_current_user
 from app.models.blueprint import Blueprint
 from app.models.user import User
 from app.schemas.common import ApiResponse
@@ -24,6 +24,7 @@ router = APIRouter(prefix="/projects/{project_id}/technology-stack", tags=["Tech
 def generate_tech_stack(
     project_id: str,
     current_user: User = Depends(get_current_user),
+    _: None = Depends(check_generation_rate_limit),
     db: Session = Depends(get_db),
 ) -> ApiResponse[BlueprintResponse]:
     """Generate or regenerate Technology Stack Recommendation using configured AI provider."""

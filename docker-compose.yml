@@ -14,7 +14,7 @@ services:
       - SECRET_KEY=${SECRET_KEY:-local-dev-secret-key-32-chars-long-abc}
       - DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/ai_business_architect
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
       - SESSION_HTTPS_ONLY=false
       - LOG_LEVEL=INFO
     depends_on:

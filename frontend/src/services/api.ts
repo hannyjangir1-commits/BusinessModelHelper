@@ -78,6 +78,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     return (await response.blob()) as unknown as T;
   }
 
+  const csrfHeader = response.headers.get('X-CSRF-Token');
+  if (csrfHeader) {
+    setCsrfToken(csrfHeader);
+  }
+
   let data: any = null;
   try {
     data = await response.json();
@@ -127,7 +132,10 @@ export const api = {
     },
 
     async me(): Promise<User> {
-      const res = await request<ApiResponse<User>>('/api/auth/me', { method: 'GET' });
+      const res = await request<ApiResponse<User & { csrf_token?: string }>>('/api/auth/me', { method: 'GET' });
+      if (res.data?.csrf_token) {
+        setCsrfToken(res.data.csrf_token);
+      }
       return res.data!;
     },
 

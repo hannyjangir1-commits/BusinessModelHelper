@@ -6,7 +6,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import check_generation_rate_limit, get_current_user
 from app.models.blueprint import Blueprint
 from app.models.user import User
 from app.schemas.common import ApiResponse
@@ -33,6 +33,7 @@ router = APIRouter(prefix="/projects/{project_id}/roadmap", tags=["Execution Roa
 def generate_roadmap(
     project_id: str,
     current_user: User = Depends(get_current_user),
+    _: None = Depends(check_generation_rate_limit),
     db: Session = Depends(get_db),
 ) -> ApiResponse[BlueprintResponse]:
     """Generate intelligent 30/60/90-day execution roadmap based on project blueprint and risks."""

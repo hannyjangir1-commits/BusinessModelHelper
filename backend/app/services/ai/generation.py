@@ -28,7 +28,7 @@ def generate_business_model_canvas(
 ) -> Tuple[Blueprint, List[str]]:
     """Execute end-to-end Business Model Canvas generation with versioning and audit tracking."""
     ai_client = client or GeminiAIClient()
-    model_name = getattr(ai_client, "model", "gemini-2.5-flash")
+    model_name = getattr(ai_client, "model", "gemini-3.5-flash-lite")
 
     # 1. Create audit generation run record
     run = GenerationRun(
@@ -134,7 +134,7 @@ def generate_technology_stack(
 ) -> Tuple[Blueprint, List[str]]:
     """Execute end-to-end Technology Stack generation with versioning and audit tracking."""
     ai_client = client or GeminiAIClient()
-    model_name = getattr(ai_client, "model", "gemini-2.5-flash")
+    model_name = getattr(ai_client, "model", "gemini-3.5-flash-lite")
 
     # 1. Create audit generation run record
     run = GenerationRun(

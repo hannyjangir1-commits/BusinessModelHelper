@@ -75,3 +75,20 @@ def verify_csrf(
         if request.headers.get("Authorization", "").startswith("Bearer "):
             return
         raise ForbiddenError("CSRF verification failed. Missing or invalid X-CSRF-Token header.")
+
+
+def check_generation_rate_limit(
+    current_user: User = Depends(get_current_user),
+) -> None:
+    """Enforce sliding-window rate limits on resource-intensive AI generation and external research."""
+    from app.core.exceptions import RateLimitExceededError
+    from app.core.rate_limiting import generation_rate_limiter
+
+    rate_key = f"gen:{current_user.id}"
+    limited, retry_after = generation_rate_limiter.is_rate_limited(rate_key, max_attempts=15, window_seconds=60)
+    if limited:
+        raise RateLimitExceededError(
+            f"Generation rate limit exceeded. Please wait {retry_after}s before requesting another generation.",
+            retry_after=retry_after,
+        )
+

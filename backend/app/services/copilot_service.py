@@ -244,7 +244,7 @@ Founder Edit Instruction:
             proposal_content=proposed_content,
             previous_content=previous_content if isinstance(previous_content, dict) else None,
             reasoning=reasoning,
-            model=getattr(ai_client, "model", "gemini-2.5-flash"),
+            model=getattr(ai_client, "model", "gemini-3.5-flash-lite"),
         )
         db.add(revision)
         db.commit()
