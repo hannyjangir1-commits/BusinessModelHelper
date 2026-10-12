@@ -16,7 +16,7 @@ from app.services.ai.business_rules import evaluate_bmc_rules, evaluate_tech_sta
 from app.services.ai.client import GeminiAIClient
 from app.services.ai.prompts import PROMPT_VERSION, build_bmc_prompt, build_tech_stack_prompt
 from app.services.ai.validation import validate_bmc_response, validate_tech_stack_response
-from app.services.project_service import save_blueprint_version
+from app.services.project_service import prune_generation_runs, save_blueprint_version
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +67,7 @@ def generate_business_model_canvas(
             content_json=validated_data.model_dump(),
         )
 
-        # 7. Complete audit run record
+        # 7. Complete audit run record and enforce retention limit
         db.execute(
             update(GenerationRun)
             .where(GenerationRun.id == run_id)
@@ -79,6 +79,7 @@ def generate_business_model_canvas(
                 completed_at=datetime.now(timezone.utc),
             )
         )
+        prune_generation_runs(db, project.id, "business_model")
 
         # Update project timestamp
         project.updated_at = datetime.now(timezone.utc)
@@ -102,6 +103,7 @@ def generate_business_model_canvas(
                 completed_at=datetime.now(timezone.utc),
             )
         )
+        prune_generation_runs(db, project.id, "business_model")
         db.commit()
 
         logger.error(
@@ -163,7 +165,7 @@ def generate_technology_stack(
             content_json=validated_data.model_dump(),
         )
 
-        # 7. Complete audit run record
+        # 7. Complete audit run record and enforce retention limit
         db.execute(
             update(GenerationRun)
             .where(GenerationRun.id == run_id)
@@ -175,6 +177,7 @@ def generate_technology_stack(
                 completed_at=datetime.now(timezone.utc),
             )
         )
+        prune_generation_runs(db, project.id, "technology_stack")
 
         # Update project timestamp
         project.updated_at = datetime.now(timezone.utc)
@@ -198,6 +201,7 @@ def generate_technology_stack(
                 completed_at=datetime.now(timezone.utc),
             )
         )
+        prune_generation_runs(db, project.id, "technology_stack")
         db.commit()
 
         logger.error(

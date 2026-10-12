@@ -67,11 +67,11 @@ def test_project_list_query_count_does_not_grow_with_page_size(db):
     """Verify that get_user_projects uses bulk queries and query count is O(1), not O(N)."""
     from contextlib import contextmanager
     from sqlalchemy import event
+    from app.models.project import Project
     from app.models.user import User
     from app.models.blueprint import Blueprint
     from app.models.roadmap_task import RoadmapTask
-    from app.schemas.project import ProjectCreateRequest
-    from app.services.project_service import create_project, get_user_projects
+    from app.services.project_service import get_user_projects
 
     @contextmanager
     def capture_queries(engine):
@@ -97,13 +97,15 @@ def test_project_list_query_count_does_not_grow_with_page_size(db):
 
     # Create 8 projects, with blueprints and roadmap tasks
     for i in range(8):
-        req = ProjectCreateRequest(
+        p = Project(
+            user_id=user.id,
             name=f"Project {i}",
             industry="Technology",
             idea_description=f"Description for project {i}",
             business_stage="validation",
         )
-        p = create_project(db, user, req)
+        db.add(p)
+        db.flush()
         
         # Add blueprints
         bp1 = Blueprint(

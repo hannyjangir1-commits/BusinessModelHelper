@@ -20,7 +20,7 @@ from app.schemas.financial import (
     ScenarioProjection,
 )
 from app.services.ai.client import GeminiAIClient, MockAIClient
-from app.services.project_service import get_user_project_by_id
+from app.services.project_service import get_user_project_by_id, prune_financial_model_versions
 
 
 def calculate_break_even(assumptions: FinancialAssumptions) -> BreakEvenMetrics:
@@ -353,6 +353,8 @@ def save_or_update_financial_model(
         scenarios_json={k: v.model_dump() for k, v in computed.scenarios.items()} if computed.scenarios else None,
     )
     db.add(db_model)
+    db.flush()
+    prune_financial_model_versions(db, project.id)
     project.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(db_model)

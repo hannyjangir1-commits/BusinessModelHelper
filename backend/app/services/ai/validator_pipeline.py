@@ -15,7 +15,7 @@ from app.models.user import User
 from app.schemas.validator import ValidationReportData
 from app.services.ai.client import GeminiAIClient
 from app.services.ai.prompts import PROMPT_VERSION
-from app.services.project_service import save_blueprint_version
+from app.services.project_service import prune_generation_runs, save_blueprint_version
 
 logger = logging.getLogger(__name__)
 
@@ -278,6 +278,7 @@ def generate_validation_report(
                 completed_at=datetime.now(timezone.utc),
             )
         )
+        prune_generation_runs(db, project.id, "validation_report")
 
         project.updated_at = datetime.now(timezone.utc)
         db.commit()
@@ -299,6 +300,7 @@ def generate_validation_report(
                 completed_at=datetime.now(timezone.utc),
             )
         )
+        prune_generation_runs(db, project.id, "validation_report")
         db.commit()
         logger.error(f"Validation generation failed: {error_msg}")
         raise

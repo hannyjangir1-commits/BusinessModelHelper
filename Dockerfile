@@ -42,6 +42,7 @@ RUN pip install --no-cache-dir -r requirements.txt -c constraints.txt
 COPY backend/app ./app
 COPY backend/migrations ./migrations
 COPY backend/alembic.ini ./alembic.ini
+COPY backend/scripts ./scripts
 
 # Copy compiled frontend assets from Stage 1 into /app/static
 COPY --from=frontend-builder /app/frontend/dist ./static

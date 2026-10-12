@@ -37,6 +37,19 @@ AI Business Architect is an enterprise-grade, full-stack AI platform engineered 
    - Controlled before-and-after diff previews with explicit Accept and Reject workflows. Proposals never mutate saved blueprints until explicitly confirmed by the founder.
    - Full version audit logging of accepted revisions.
 
+### Account Limits & Data Retention Policy
+1. **Per-User Active Project Limit (Hard Maximum: 3 Projects)**:
+   - Enforced strictly on the backend API based on authenticated user identity (`user.id`). Client-supplied owner IDs are never trusted.
+   - Concurrency-safe: Combines in-process locking with database row-level locking (`SELECT ... FOR UPDATE` on PostgreSQL) to serialize simultaneous creation requests without cross-account contention.
+   - At limit, project creation returns HTTP 403 Forbidden with stable error code `PROJECT_LIMIT_REACHED`.
+   - Existing projects remain fully operable (view, edit, PDF export, and delete). Deleting an existing project immediately frees a slot.
+   - Dashboard UI displays real-time capacity badge (`{count}/3 Projects`), disabling creation and displaying an explanatory guidance banner when at capacity.
+2. **Generated History Retention**:
+   - **Blueprints & Output Versions**: For each project and module (`business_model`, `technology_stack`, `validation_report`, `market_research`, `execution_roadmap`, `financial_model`), the platform retains the latest/current output plus **at most 3 older generated versions** (up to 4 versions total per project and module).
+   - **Generation Run Audit Records**: Retains at most the **3 most recent completed generation runs** (`status != 'running'`) per project and module. Running generations are strictly preserved and never pruned.
+   - **Safety & Atomic Execution**: Cleanup runs automatically in-transaction after successful generation finalization; failed runs never trigger accidental data loss. Monotonic version numbering is preserved without renumbering.
+   - **Operator Maintenance Script**: For existing historical data, `backend/scripts/prune_excess_historical_data.py` provides an idempotent cleanup procedure with default `--dry-run` inspection and required operator backup procedures before `--execute`.
+
 ---
 
 ## 2. Technology Stack
@@ -152,15 +165,15 @@ Execute the full backend test suite covering unit formulas, Argon2id security, C
 # Run from repository root
 .\.venv\Scripts\python.exe -m pytest backend/tests -v
 ```
-> **Verified Status (October 12, 2026)**: **71 passed, 1 skipped** (72 total tests). The single skipped test exercises Unix symlink traversal on non-elevated Windows environments.
+> **Verified Status**: **83 passed** (83 total tests in backend pytest suite).
 
 ### Running Frontend Tests
-Execute the frontend test suite verifying intake draft persistence and user isolation, debounced search, pagination, workspace concurrency and partial failure isolation, accessible modals, and SEO metadata:
+Execute the frontend test suite verifying intake draft persistence, project limit capacity indicators, debounced search, pagination, workspace concurrency and partial failure isolation, accessible modals, and SEO metadata:
 ```powershell
 cd frontend
 npm test
 ```
-> **Verified Status (October 12, 2026)**: **40 passed** (40 total tests).
+> **Verified Status**: **44 passed** (44 total tests in frontend test suite).
 
 ### Running Frontend Production Build & Typecheck
 ```powershell

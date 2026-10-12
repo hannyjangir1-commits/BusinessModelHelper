@@ -29,6 +29,24 @@ export const CreateProjectPage: React.FC<CreateProjectPageProps> = ({ onNavigate
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [projectCount, setProjectCount] = useState<number | null>(null);
+
+  // Check current project count to warn user if at the 3-project account limit
+  useEffect(() => {
+    let isMounted = true;
+    api.projects.list({ page: 1, pageSize: 1 })
+      .then((res) => {
+        if (isMounted) {
+          setProjectCount(res.pagination?.total_count ?? 0);
+        }
+      })
+      .catch(() => {
+        // Ignore network errors on background quota check
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Requirement 1: Restore saved draft before persistence runs via validated lazy state initializer
   const [formData, setFormData] = useState<ProjectFormData>(() => loadProjectDraft(userId));
@@ -154,6 +172,13 @@ export const CreateProjectPage: React.FC<CreateProjectPageProps> = ({ onNavigate
 
       <Card>
         <CardContent className="p-8 space-y-6">
+          {projectCount !== null && projectCount >= 3 && (
+            <Alert
+              type="error"
+              message="Active Project Limit Reached (3 of 3 slots used): Your account has reached the maximum allowance of 3 projects. To create a new project, return to the Dashboard and delete an existing project first."
+            />
+          )}
+
           {errorMessage && <Alert type="error" message={errorMessage} onClose={() => setErrorMessage(null)} />}
 
           {/* Step 1: Project Identity */}
@@ -365,9 +390,11 @@ export const CreateProjectPage: React.FC<CreateProjectPageProps> = ({ onNavigate
                 variant="primary"
                 onClick={handleSubmit}
                 isLoading={isSubmitting}
+                disabled={projectCount !== null && projectCount >= 3}
+                title={projectCount !== null && projectCount >= 3 ? 'Project limit reached (3/3). Delete an existing project first.' : undefined}
                 rightIcon={<Check className="w-4 h-4" />}
               >
-                Create Project Workspace
+                {projectCount !== null && projectCount >= 3 ? 'Limit Reached (3/3)' : 'Create Project Workspace'}
               </Button>
             )}
           </div>

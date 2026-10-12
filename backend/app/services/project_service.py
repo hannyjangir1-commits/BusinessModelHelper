@@ -2,12 +2,13 @@
 
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
-from sqlalchemy import desc, func, or_, select
+from sqlalchemy import delete, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError, ProjectLimitExceededError
 from app.models.blueprint import Blueprint
+from app.models.generation import GenerationRun
 from app.models.project import Project
 from app.models.roadmap_task import RoadmapTask
 from app.models.user import User
@@ -16,14 +17,115 @@ from app.schemas.project import ProjectCreateRequest, ProjectResponse, ProjectUp
 import threading
 from collections import defaultdict
 
+MAX_PROJECTS_PER_USER = 3
+MAX_BLUEPRINT_VERSIONS_RETAINED = 4  # Current/latest + at most 3 older versions
+MAX_COMPLETED_RUNS_RETAINED = 3  # At most 3 most recent completed runs per project/module
+
 _project_module_locks_guard = threading.Lock()
 _project_module_locks: Dict[Tuple[str, str], threading.Lock] = defaultdict(threading.Lock)
+
+_user_creation_locks_guard = threading.Lock()
+_user_creation_locks: Dict[str, threading.Lock] = defaultdict(threading.Lock)
 
 
 def _get_project_module_lock(project_id: str, module_type: str) -> threading.Lock:
     """Retrieve fine-grained lock for a specific project module."""
     with _project_module_locks_guard:
         return _project_module_locks[(project_id, module_type)]
+
+
+def _get_user_creation_lock(user_id: str) -> threading.Lock:
+    """Retrieve fine-grained lock for project creation per user account."""
+    with _user_creation_locks_guard:
+        return _user_creation_locks[user_id]
+
+
+def prune_blueprint_versions(
+    db: Session,
+    project_id: str,
+    module_type: str,
+    keep_count: int = MAX_BLUEPRINT_VERSIONS_RETAINED,
+) -> int:
+    """Enforce generated history retention for blueprints:
+    Preserve current/latest output plus no more than 3 older generated versions
+    (up to 4 saved output versions total per project and module).
+    """
+    blueprints = db.execute(
+        select(Blueprint.id)
+        .where(
+            Blueprint.project_id == project_id,
+            Blueprint.module_type == module_type,
+        )
+        .order_by(desc(Blueprint.version))
+    ).scalars().all()
+
+    if len(blueprints) <= keep_count:
+        return 0
+
+    to_delete = blueprints[keep_count:]
+    db.execute(
+        delete(Blueprint).where(Blueprint.id.in_(to_delete))
+    )
+    return len(to_delete)
+
+
+def prune_generation_runs(
+    db: Session,
+    project_id: str,
+    module_type: str,
+    keep_completed: int = MAX_COMPLETED_RUNS_RETAINED,
+) -> int:
+    """Enforce retention on completed generation run audit records.
+    Retains at most 3 completed generation runs per project and module.
+    Never prunes currently running generations (status == 'running').
+    """
+    completed_runs = db.execute(
+        select(GenerationRun.id)
+        .where(
+            GenerationRun.project_id == project_id,
+            GenerationRun.module_type == module_type,
+            GenerationRun.status != "running",
+        )
+        .order_by(
+            desc(func.coalesce(GenerationRun.completed_at, GenerationRun.created_at)),
+            desc(GenerationRun.created_at),
+        )
+    ).scalars().all()
+
+    if len(completed_runs) <= keep_completed:
+        return 0
+
+    to_delete = completed_runs[keep_completed:]
+    db.execute(
+        delete(GenerationRun).where(GenerationRun.id.in_(to_delete))
+    )
+    return len(to_delete)
+
+
+def prune_financial_model_versions(
+    db: Session,
+    project_id: str,
+    keep_count: int = MAX_BLUEPRINT_VERSIONS_RETAINED,
+) -> int:
+    """Enforce generated history retention for financial models:
+    Preserves latest output plus at most 3 older generated versions (up to 4 total).
+    """
+    from app.models.financial_model import FinancialModel
+
+    models = db.execute(
+        select(FinancialModel.id)
+        .where(FinancialModel.project_id == project_id)
+        .order_by(desc(FinancialModel.version))
+    ).scalars().all()
+
+    if len(models) <= keep_count:
+        return 0
+
+    to_delete = models[keep_count:]
+    db.execute(
+        delete(FinancialModel).where(FinancialModel.id.in_(to_delete))
+    )
+    return len(to_delete)
 
 
 def save_blueprint_version(
@@ -38,6 +140,7 @@ def save_blueprint_version(
     Uses fine-grained project/module locking and bounded retries with savepoints (db.begin_nested())
     on unique constraint collisions (uq_project_module_version) so concurrent transactions
     reliably assign distinct, monotonic versions.
+    Automatically prunes older versions to maintain the 4-version retention limit.
     """
     import random
     import time
@@ -63,6 +166,10 @@ def save_blueprint_version(
                     )
                     db.add(blueprint)
                     db.flush()
+
+                    # Apply history retention: retain current + up to 3 older versions
+                    prune_blueprint_versions(db, project_id, module_type, keep_count=MAX_BLUEPRINT_VERSIONS_RETAINED)
+
                     return blueprint
             except (IntegrityError, OperationalError):
                 if attempt >= max_retries - 1:
@@ -114,25 +221,47 @@ def _map_project_response(project: Project, db: Session) -> ProjectResponse:
 
 
 def create_project(db: Session, user: User, data: ProjectCreateRequest) -> ProjectResponse:
-    """Create a new project owned by the user."""
-    project = Project(
-        user_id=user.id,
-        name=data.name,
-        idea_description=data.idea_description,
-        industry=data.industry,
-        business_stage=data.business_stage,
-        target_market=data.target_market,
-        target_audience=data.target_audience,
-        budget_amount=data.budget_amount,
-        budget_currency=data.budget_currency.upper(),
-        team_size=data.team_size,
-        technical_preferences=data.technical_preferences,
-        constraints=data.constraints,
-    )
-    db.add(project)
-    db.commit()
-    db.refresh(project)
-    return _map_project_response(project, db)
+    """Create a new project owned by the user, enforcing the 3-project per user limit.
+
+    Safely handles simultaneous create requests by combining a per-user memory lock
+    with a database row-level lock (FOR UPDATE on PostgreSQL) so concurrent calls
+    are strictly serialized per user account without affecting other accounts.
+    """
+    user_lock = _get_user_creation_lock(user.id)
+    with user_lock:
+        # On PostgreSQL, lock the user row across multi-worker instances
+        if db.bind and db.bind.dialect.name == "postgresql":
+            db.execute(select(User.id).where(User.id == user.id).with_for_update()).scalar_one_or_none()
+
+        # Count current active projects owned by this authenticated user
+        current_count = db.execute(
+            select(func.count(Project.id)).where(Project.user_id == user.id)
+        ).scalar_one()
+
+        if current_count >= MAX_PROJECTS_PER_USER:
+            raise ProjectLimitExceededError(
+                message=f"You have reached the maximum limit of {MAX_PROJECTS_PER_USER} active projects for your account. Please delete an existing project before creating a new one.",
+                details={"current_count": current_count, "max_limit": MAX_PROJECTS_PER_USER},
+            )
+
+        project = Project(
+            user_id=user.id,
+            name=data.name,
+            idea_description=data.idea_description,
+            industry=data.industry,
+            business_stage=data.business_stage,
+            target_market=data.target_market,
+            target_audience=data.target_audience,
+            budget_amount=data.budget_amount,
+            budget_currency=data.budget_currency.upper(),
+            team_size=data.team_size,
+            technical_preferences=data.technical_preferences,
+            constraints=data.constraints,
+        )
+        db.add(project)
+        db.commit()
+        db.refresh(project)
+        return _map_project_response(project, db)
 
 
 def get_user_projects(

@@ -35,6 +35,17 @@ class ForbiddenError(AppException):
         super().__init__(message=message, status_code=403, code="FORBIDDEN", details=details)
 
 
+class ProjectLimitExceededError(ForbiddenError):
+    def __init__(
+        self,
+        message: str = "You have reached the maximum limit of 3 active projects for your account. Please delete an existing project before creating a new one.",
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        super().__init__(message=message, details=details)
+        self.code = "PROJECT_LIMIT_REACHED"
+        self.status_code = 403
+
+
 class ConflictError(AppException):
     def __init__(self, message: str = "Resource conflict", details: Optional[Dict[str, Any]] = None) -> None:
         super().__init__(message=message, status_code=409, code="CONFLICT", details=details)

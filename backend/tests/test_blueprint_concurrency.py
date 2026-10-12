@@ -73,7 +73,7 @@ def test_concurrent_blueprint_version_assignment(tmp_path):
     assert len(versions) == num_threads
     assert sorted(versions) == list(range(1, num_threads + 1))
 
-    # Verify rows in DB match
+    # Verify rows in DB match the 4-version retention policy (latest + up to 3 older versions: 2, 3, 4, 5)
     verify_session = SessionLocal()
     db_versions = [
         row[0]
@@ -83,7 +83,7 @@ def test_concurrent_blueprint_version_assignment(tmp_path):
         .all()
     ]
     verify_session.close()
-    assert db_versions == list(range(1, num_threads + 1))
+    assert db_versions == list(range(num_threads - 3, num_threads + 1))
 
 
 def test_unique_constraint_enforcement(db):

@@ -195,21 +195,54 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigate }) => {
       {/* Welcome & Action Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Welcome back, {user?.display_name || user?.username}
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              Welcome back, {user?.display_name || user?.username}
+            </h1>
+            <span
+              id="project-capacity-badge"
+              className={`text-xs px-2.5 py-1 font-semibold rounded-full border ${
+                totalCount >= 3
+                  ? 'bg-amber-50 text-amber-800 border-amber-200'
+                  : 'bg-slate-100 text-slate-700 border-slate-200'
+              }`}
+            >
+              {totalCount}/3 Projects
+            </span>
+          </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
             Manage your venture projects, generated canvases, and architectural blueprints.
           </p>
         </div>
         <Button
+          id="create-project-btn"
           variant="primary"
           onClick={() => onNavigate('/projects/new')}
+          disabled={totalCount >= 3}
+          title={totalCount >= 3 ? 'Project limit reached (3/3). Delete an existing project to free a slot.' : undefined}
           leftIcon={<Plus className="w-4 h-4" />}
         >
-          Create Project
+          {totalCount >= 3 ? 'Limit Reached (3/3)' : 'Create Project'}
         </Button>
       </div>
+
+      {/* Project Limit Notification Banner when at 3/3 */}
+      {totalCount >= 3 && (
+        <div
+          id="project-limit-banner"
+          className="flex items-start sm:items-center justify-between gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm animate-in fade-in"
+        >
+          <div className="flex items-start sm:items-center gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5 sm:mt-0" />
+            <div>
+              <p className="font-semibold text-amber-950">Active Project Limit Reached (3 of 3 slots used)</p>
+              <p className="text-xs text-amber-800 mt-0.5">
+                Your account is currently using all 3 active project slots. You can continue viewing, editing, exporting, and managing your existing projects below. To create a new project, delete an existing project to free up a slot.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Top Error Alert Banner if an error occurred */}
       {error && (
