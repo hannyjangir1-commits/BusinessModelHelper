@@ -2,13 +2,14 @@
 
 @layer base {
   :root {
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-    --font-heading: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-heading: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     color-scheme: light;
   }
 
   * {
     border-color: #e2e8f0;
+    box-sizing: border-box;
   }
 
   body {
@@ -16,7 +17,6 @@
     background-color: #f8fafc;
     color: #0f172a;
     min-height: 100vh;
-    overflow-x: hidden;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -24,6 +24,12 @@
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading);
     letter-spacing: -0.02em;
+  }
+
+  /* Prevent horizontal layout blowout on narrow mobile viewports (320px+) */
+  img, svg, video, canvas {
+    max-width: 100%;
+    height: auto;
   }
 }
 
@@ -46,8 +52,57 @@
   background: #94a3b8;
 }
 
-/* Accessible focus ring */
+/* Accessible focus ring (WCAG 2.4.7 / 2.4.11) */
 :focus-visible {
   outline: 2px solid #4f46e5;
   outline-offset: 2px;
+}
+
+/* Reduced motion preference (WCAG 2.2.2 / 2.3.3) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Print stylesheet for printable business reports, canvases, and blueprints */
+@media print {
+  header,
+  footer,
+  nav,
+  button,
+  .no-print,
+  [role="navigation"],
+  [aria-label="Pagination"] {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+
+  article,
+  table,
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  a {
+    color: #000000 !important;
+    text-decoration: underline !important;
+  }
 }

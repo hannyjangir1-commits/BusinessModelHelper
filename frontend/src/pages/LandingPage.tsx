@@ -5,14 +5,8 @@ import {
   ChevronDown,
   ChevronUp,
   Cpu,
-  Download,
-  FileText,
-  HelpCircle,
   Layers,
-  Lightbulb,
-  ShieldCheck,
   Sparkles,
-  TrendingUp,
 } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
@@ -327,14 +321,27 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
             return (
               <div key={idx} className="bg-white border border-slate-200 rounded-xl overflow-hidden transition-all">
                 <button
+                  id={`faq-question-${idx}`}
+                  type="button"
                   onClick={() => setOpenFaq(isOpen ? null : idx)}
-                  className="w-full text-left p-5 flex items-center justify-between text-sm font-semibold text-slate-900 hover:text-indigo-600"
+                  aria-expanded={isOpen}
+                  aria-controls={`faq-answer-${idx}`}
+                  className="w-full text-left p-5 flex items-center justify-between text-sm font-semibold text-slate-900 hover:text-indigo-600 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 rounded-xl transition-colors cursor-pointer"
                 >
                   <span>{faq.q}</span>
-                  {isOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                  {isOpen ? (
+                    <ChevronUp className="w-4 h-4 text-slate-500 shrink-0" aria-hidden="true" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" aria-hidden="true" />
+                  )}
                 </button>
                 {isOpen && (
-                  <div className="px-5 pb-5 pt-1 text-xs text-slate-600 leading-relaxed border-t border-slate-100">
+                  <div
+                    id={`faq-answer-${idx}`}
+                    role="region"
+                    aria-labelledby={`faq-question-${idx}`}
+                    className="px-5 pb-5 pt-1 text-xs text-slate-600 leading-relaxed border-t border-slate-100"
+                  >
                     {faq.a}
                   </div>
                 )}

@@ -15,6 +15,7 @@ from app.models.user import User
 from app.schemas.validator import ValidationReportData
 from app.services.ai.client import GeminiAIClient
 from app.services.ai.prompts import PROMPT_VERSION
+from app.services.project_service import save_blueprint_version
 
 logger = logging.getLogger(__name__)
 
@@ -257,23 +258,13 @@ def generate_validation_report(
         # 4. Apply deterministic rules
         validated_data, warnings = evaluate_validator_rules(validated_data, project)
 
-        # 5. Determine next version
-        latest_version = db.execute(
-            select(func.coalesce(func.max(Blueprint.version), 0)).where(
-                Blueprint.project_id == project.id,
-                Blueprint.module_type == "validation_report",
-            )
-        ).scalar_one()
-        new_version = latest_version + 1
-
-        # 6. Save persistent blueprint
-        blueprint = Blueprint(
+        # 5. Save persistent blueprint safely handling concurrency
+        blueprint = save_blueprint_version(
+            db=db,
             project_id=project.id,
             module_type="validation_report",
-            version=new_version,
             content_json=validated_data.model_dump(),
         )
-        db.add(blueprint)
 
         # 7. Complete audit run
         db.execute(

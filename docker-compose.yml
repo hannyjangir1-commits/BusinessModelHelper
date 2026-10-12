@@ -1,3 +1,8 @@
+# ==============================================================================
+# LOCAL DEVELOPMENT ONLY - DO NOT USE FOR PRODUCTION DEPLOYMENT
+# Production is hosted exclusively on Render via render.yaml and managed PostgreSQL.
+# ==============================================================================
+
 services:
   web:
     build:
@@ -12,7 +17,7 @@ services:
       - PORT=8000
       - HOST=0.0.0.0
       - SECRET_KEY=${SECRET_KEY:-local-dev-secret-key-32-chars-long-abc}
-      - DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/ai_business_architect
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_dev_insecure_local}@db:5432/${POSTGRES_DB:-ai_business_architect}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
       - SESSION_HTTPS_ONLY=false
@@ -26,15 +31,16 @@ services:
     container_name: ai_business_architect_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: ai_business_architect
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_dev_insecure_local}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_business_architect}
     ports:
-      - "5432:5432"
+      # Bound strictly to 127.0.0.1 loopback for local development security
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_business_architect"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ai_business_architect}"]
       interval: 5s
       timeout: 5s
       retries: 5

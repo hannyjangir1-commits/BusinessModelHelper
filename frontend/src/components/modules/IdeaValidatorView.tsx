@@ -14,13 +14,19 @@ import {
 import { api } from '../../services/api';
 import {
   BlueprintVersionItem,
-  CustomerInterviewQuestion,
   InterviewQuestionItem,
   ValidationExperiment,
   ValidationReportData,
   ValidationReportResponse,
 } from '../../types';
-import { safeText, normalizeValidationReportData } from '../../utils/validator';
+
+import {
+  safeText,
+  normalizeValidationReportData,
+  getQuestionText,
+  getQuestionFocusCategory,
+  getQuestionRationale,
+} from '../../utils/validator';
 import { Button } from '../ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Badge } from '../ui/Badge';
@@ -32,16 +38,10 @@ interface QuestionCardProps {
 }
 
 export const ValidationQuestionCard: React.FC<QuestionCardProps> = ({ question, index }) => {
-  const isObj = typeof question === 'object' && question !== null;
-  const questionText = isObj
-    ? (question as CustomerInterviewQuestion).question_text || (question as any).question || (question as any).text || ''
-    : String(question || '');
-  const focusCategory = isObj
-    ? (question as CustomerInterviewQuestion).focus_category || (question as any).category || (question as any).focus
-    : undefined;
-  const rationale = isObj
-    ? (question as CustomerInterviewQuestion).rationale || (question as any).reasoning || (question as any).why
-    : undefined;
+  const questionText = getQuestionText(question);
+  const focusCategory = getQuestionFocusCategory(question);
+  const rationale = getQuestionRationale(question);
+
 
   const getBadgeVariant = (cat?: string): 'indigo' | 'amber' | 'rose' | 'emerald' | 'slate' => {
     if (!cat) return 'slate';
@@ -128,6 +128,11 @@ interface IdeaValidatorViewProps {
   projectId: string;
   report: ValidationReportResponse | null;
   versions: BlueprintVersionItem[];
+  isLoading?: boolean;
+  error?: string | null;
+  versionError?: string | null;
+  onRetry?: () => void;
+  onRetryVersions?: () => void;
   onReportUpdated: () => void;
 }
 
@@ -135,44 +140,121 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
   projectId,
   report,
   versions,
+  isLoading = false,
+  error = null,
+  versionError = null,
+  onRetry,
+  onRetryVersions,
   onReportUpdated,
 }) => {
-  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [currentReport, setCurrentReport] = useState<ValidationReportResponse | null>(report);
   const [selectedVersion, setSelectedVersion] = useState<number | undefined>(report?.version);
-  const [error, setError] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isLoadingVersion, setIsLoadingVersion] = useState<boolean>(false);
+  const [localError, setLocalError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  // Synchronize internal state whenever parent's report prop changes (e.g. project load or switch)
+  React.useEffect(() => {
+    setCurrentReport(report);
+    setSelectedVersion(report?.version);
+  }, [report]);
 
   const handleGenerate = async () => {
     if (isGenerating) return;
     setIsGenerating(true);
-    setError(null);
+    setLocalError(null);
     setSuccess(null);
     try {
-      await api.validator.generate(projectId);
+      const generated = await api.validator.generate(projectId);
+      setCurrentReport(generated);
+      setSelectedVersion(generated?.version);
       setSuccess('Business Idea Validation report successfully synthesized.');
       onReportUpdated();
     } catch (err: any) {
-      setError(err?.message || 'Failed to generate idea validation report.');
+      setLocalError(err?.message || 'Failed to generate idea validation report.');
     } finally {
       setIsGenerating(false);
     }
   };
 
   const handleVersionChange = async (ver: number) => {
+    if (isLoadingVersion || isGenerating) return;
+    setIsLoadingVersion(true);
+    setLocalError(null);
     setSelectedVersion(ver);
     try {
-      await api.validator.get(projectId, ver);
-      onReportUpdated();
+      const fetched = await api.validator.get(projectId, ver);
+      // Requirement 5: Display the fetched version user selected. Do not reload latest report!
+      setCurrentReport(fetched);
     } catch (err: any) {
-      setError(err?.message || 'Failed to load report version.');
+      setLocalError(err?.message || `Failed to load validation report version ${ver}.`);
+    } finally {
+      setIsLoadingVersion(false);
     }
   };
 
-  // Safely normalize raw content from backend
-  const rawData = report?.content_json || report?.content || null;
+  const activeReport = currentReport;
+  const rawData = activeReport?.content_json || activeReport?.content || null;
   const data: ValidationReportData | null = rawData ? normalizeValidationReportData(rawData) : null;
 
-  if (!report || !data) {
+  // 1. Module Loading State
+  if (isLoading || isLoadingVersion) {
+    return (
+      <div
+        className="bg-white border border-slate-200 rounded-2xl p-16 text-center max-w-xl mx-auto my-8 space-y-4 shadow-xs"
+        role="status"
+        aria-live="polite"
+      >
+        <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
+          <RefreshCw className="w-6 h-6 animate-spin" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-base font-bold text-slate-900">
+            {isLoadingVersion ? 'Retrieving Historical Report' : 'Loading Validation Report'}
+          </h3>
+          <p className="text-xs text-slate-500">
+            {isLoadingVersion
+              ? `Loading validation report version ${selectedVersion}...`
+              : 'Synthesizing strategic validation insights and neutral experiments...'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Fatal / Network Error State (non-404 failure)
+  if (error && !activeReport) {
+    return (
+      <div
+        role="alert"
+        aria-live="polite"
+        className="bg-rose-50/70 border border-rose-200 rounded-2xl p-10 text-center max-w-lg mx-auto space-y-4 my-8"
+      >
+        <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+          <AlertTriangle className="w-6 h-6 text-rose-600" aria-hidden="true" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-base font-bold text-slate-900">Failed to Load Validation Report</h3>
+          <p className="text-xs text-rose-700">{error}</p>
+        </div>
+        {onRetry && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRetry}
+            leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+            aria-label="Retry loading Idea Validator"
+          >
+            Retry
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  // 3. Clean Empty State (404: no report generated yet)
+  if (!activeReport || !data) {
     return (
       <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-12 text-center max-w-lg mx-auto space-y-4 my-8">
         <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
@@ -184,7 +266,7 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
             Rigorously evaluate problem-solution fit, assumptions, risks, and neutral validation experiments before building.
           </p>
         </div>
-        {error && <Alert type="error" message={error} onClose={() => setError(null)} />}
+        {localError && <Alert type="error" message={localError} onClose={() => setLocalError(null)} />}
         <Button
           onClick={handleGenerate}
           isLoading={isGenerating}
@@ -209,10 +291,10 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="font-bold text-slate-900">Validation Synthesis</h2>
-              <Badge variant="amber">Version {report.version}</Badge>
+              <Badge variant="amber">Version {activeReport.version}</Badge>
             </div>
             <p className="text-xs text-slate-500">
-              Evaluated {report.created_at ? new Date(report.created_at).toLocaleDateString() : 'recently'} with deterministic risk heuristics
+              Evaluated {activeReport.created_at ? new Date(activeReport.created_at).toLocaleDateString() : 'recently'} with deterministic risk heuristics
             </p>
           </div>
         </div>
@@ -220,9 +302,10 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
         <div className="flex items-center gap-2">
           {versions.length > 1 && (
             <select
-              value={selectedVersion || report.version}
+              value={selectedVersion || activeReport.version}
               onChange={(e) => handleVersionChange(Number(e.target.value))}
               className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 bg-slate-50 text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              aria-label="Select validation report version"
             >
               {versions.map((v) => (
                 <option key={v.id || v.version} value={v.version}>
@@ -245,7 +328,30 @@ export const IdeaValidatorView: React.FC<IdeaValidatorViewProps> = ({
         </div>
       </div>
 
-      {error && <Alert type="error" message={error} onClose={() => setError(null)} />}
+      {/* Requirement 3: Separate Version History Error Banner without clearing report */}
+      {versionError && (
+        <div
+          role="alert"
+          className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 gap-3"
+        >
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" aria-hidden="true" />
+            <span>Unable to load version history: {versionError}</span>
+          </div>
+          {onRetryVersions && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRetryVersions}
+              aria-label="Retry loading version history"
+            >
+              Retry History
+            </Button>
+          )}
+        </div>
+      )}
+
+      {localError && <Alert type="error" message={localError} onClose={() => setLocalError(null)} />}
       {success && <Alert type="success" message={success} onClose={() => setSuccess(null)} />}
 
       {/* Executive Readiness Card */}

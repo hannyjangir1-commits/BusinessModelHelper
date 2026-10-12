@@ -62,27 +62,41 @@ async def csrf_protection_middleware(request: Request, call_next):
             from app.core.sessions import decode_session_token
 
             payload = decode_session_token(cookie_val)
-            if payload and "csrf_token" in payload:
-                # In test suite, allow existing test clients without CSRF header unless explicitly testing CSRF enforcement
-                is_testing = settings.is_test or bool(os.environ.get("PYTEST_CURRENT_TEST"))
-                if is_testing and not request.headers.get("X-Test-Enforce-CSRF"):
-                    return await call_next(request)
-
-                header_csrf = request.headers.get("X-CSRF-Token")
-                if not header_csrf or header_csrf != payload["csrf_token"]:
-                    return JSONResponse(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        content={
-                            "success": False,
-                            "error": {
-                                "code": "FORBIDDEN",
-                                "message": "CSRF verification failed. Missing or invalid X-CSRF-Token header.",
-                                "details": {},
-                            },
+            # Malformed payloads (missing csrf_token, session_id, or user_id) must not bypass CSRF verification
+            if not payload or not payload.get("csrf_token"):
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={
+                        "success": False,
+                        "error": {
+                            "code": "FORBIDDEN",
+                            "message": "CSRF verification failed. Invalid or malformed session cookie.",
+                            "details": {},
                         },
-                    )
+                    },
+                )
+
+            # In test suite, allow existing test clients without CSRF header unless explicitly testing CSRF enforcement
+            is_testing = settings.is_test or bool(os.environ.get("PYTEST_CURRENT_TEST"))
+            if is_testing and not request.headers.get("X-Test-Enforce-CSRF"):
+                return await call_next(request)
+
+            header_csrf = request.headers.get("X-CSRF-Token")
+            if not header_csrf or header_csrf != payload["csrf_token"]:
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={
+                        "success": False,
+                        "error": {
+                            "code": "FORBIDDEN",
+                            "message": "CSRF verification failed. Missing or invalid X-CSRF-Token header.",
+                            "details": {},
+                        },
+                    },
+                )
 
     return await call_next(request)
+
 
 
 @app.middleware("http")
@@ -202,23 +216,176 @@ if static_dist_path:
 
     logger.info(f"Mounted production frontend static assets from: {static_dist_path}")
 
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def serve_spa(full_path: str):
-        # Exclude API, health, docs routes from SPA catch-all
-        if (
-            full_path.startswith("api")
-            or full_path.startswith("health")
-            or full_path.startswith("ready")
-            or full_path.startswith("docs")
-            or full_path.startswith("redoc")
-            or full_path.startswith("openapi.json")
-        ):
-            return JSONResponse(status_code=404, content={"success": False, "error": {"code": "NOT_FOUND", "message": "Not found"}})
 
-        # Check if requesting a direct static file from dist root (e.g. favicon.ico, vite.svg)
-        file_path = static_dist_path / full_path
-        if full_path and file_path.is_file():
-            return FileResponse(file_path)
+@app.get("/robots.txt", include_in_schema=False)
+async def get_robots_txt():
+    """Serve robots exclusion standard, prioritizing static built file or dynamic generation."""
+    if static_dist_path:
+        robots_file = (static_dist_path.resolve() / "robots.txt").resolve()
+        if robots_file.is_file() and robots_file.is_relative_to(static_dist_path.resolve()):
+            return FileResponse(robots_file, media_type="text/plain")
 
-        # Fallback to SPA index.html for client-side routing
-        return FileResponse(static_dist_path / "index.html")
+    sitemap_line = (
+        f"Sitemap: {settings.public_site_url.rstrip('/')}/sitemap.xml"
+        if settings.public_site_url
+        else "Sitemap: /sitemap.xml"
+    )
+    content = (
+        "# AI Business Architect - Robots Exclusion Policy\n"
+        "User-agent: *\n"
+        "Allow: /$\n"
+        "Allow: /terms$\n"
+        "Allow: /privacy$\n"
+        "Allow: /acceptable-use$\n"
+        "Allow: /contact$\n"
+        "Disallow: /dashboard\n"
+        "Disallow: /profile\n"
+        "Disallow: /projects/\n"
+        "Disallow: /login\n"
+        "Disallow: /register\n"
+        "Disallow: /api/\n\n"
+        f"{sitemap_line}\n"
+    )
+    return Response(content=content, media_type="text/plain")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def get_sitemap_xml():
+    """Serve XML sitemap for public indexable routes, excluding private user projects and API routes."""
+    if static_dist_path and not settings.public_site_url:
+        sitemap_file = (static_dist_path.resolve() / "sitemap.xml").resolve()
+        if sitemap_file.is_file() and sitemap_file.is_relative_to(static_dist_path.resolve()):
+            return FileResponse(sitemap_file, media_type="application/xml")
+
+    base = settings.public_site_url.rstrip("/") if settings.public_site_url else ""
+    routes = [
+        ("/", "weekly", "1.0"),
+        ("/terms", "monthly", "0.5"),
+        ("/privacy", "monthly", "0.5"),
+        ("/acceptable-use", "monthly", "0.5"),
+        ("/contact", "monthly", "0.6"),
+    ]
+    xml_entries = "\n".join(
+        f"  <url>\n    <loc>{base}{path}</loc>\n    <changefreq>{freq}</changefreq>\n    <priority>{prio}</priority>\n  </url>"
+        for path, freq, prio in routes
+    )
+    content = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{xml_entries}\n"
+        "</urlset>"
+    )
+    return Response(content=content, media_type="application/xml")
+
+
+# Recognized static and dynamic frontend routes aligned with frontend/src/App.tsx
+RECOGNIZED_STATIC_CLIENT_ROUTES: set[str] = {
+    "",
+    "terms",
+    "privacy",
+    "acceptable-use",
+    "contact",
+    "login",
+    "register",
+    "dashboard",
+    "profile",
+    "projects/new",
+}
+
+STATIC_ASSET_EXTENSIONS: set[str] = {
+    ".js", ".mjs", ".cjs", ".css", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico",
+    ".webp", ".avif", ".woff", ".woff2", ".ttf", ".eot", ".map", ".json",
+    ".txt", ".xml", ".pdf", ".wasm",
+}
+
+
+def is_valid_client_route(full_path: str) -> bool:
+    """Validate whether an incoming request path matches a recognized frontend client route.
+
+    Validates static routes and dynamic project routes (/projects/:id and /projects/:id/:tab)
+    defined in frontend/src/App.tsx.
+    """
+    clean_path = full_path.strip("/")
+    if clean_path in RECOGNIZED_STATIC_CLIENT_ROUTES:
+        return True
+
+    # Dynamic project routes: /projects/:projectId or /projects/:projectId/:tab
+    # Note: /projects/new is already covered by RECOGNIZED_STATIC_CLIENT_ROUTES
+    if clean_path.startswith("projects/"):
+        parts = clean_path.split("/")
+        if len(parts) in (2, 3) and parts[1]:
+            return True
+
+    return False
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def serve_spa(full_path: str):
+    # Exclude API, health, docs routes from SPA catch-all
+    if (
+        full_path.startswith("api")
+        or full_path.startswith("health")
+        or full_path.startswith("ready")
+        or full_path.startswith("docs")
+        or full_path.startswith("redoc")
+        or full_path.startswith("openapi.json")
+    ):
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": {"code": "NOT_FOUND", "message": "Not found"}},
+        )
+
+    if not static_dist_path:
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": {"code": "NOT_FOUND", "message": "Not found"}},
+        )
+
+    static_root = static_dist_path.resolve()
+
+    if full_path:
+        try:
+            rel_path = full_path.lstrip("/\\")
+            candidate = (static_root / rel_path).resolve()
+        except Exception:
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": {"code": "NOT_FOUND", "message": "Not found"}},
+            )
+
+        # Security check: candidate must remain inside the resolved static root.
+        # Uses Path.is_relative_to() to prevent traversal variants and symlink escapes (no string-prefix checks).
+        if not candidate.is_relative_to(static_root):
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": {"code": "NOT_FOUND", "message": "Not found"}},
+            )
+
+        # Serve requested file if resolved candidate is an existing regular file
+        if candidate.is_file():
+            return FileResponse(candidate)
+
+        # Missing static assets: never let missing JS/CSS/image assets fall through to the SPA shell
+        if candidate.suffix.lower() in STATIC_ASSET_EXTENSIONS or full_path.startswith("assets"):
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": {"code": "NOT_FOUND", "message": "Asset not found"}},
+            )
+
+    # SPA index.html fallback for client-side routing
+    index_file = (static_root / "index.html").resolve()
+    if not (index_file.is_relative_to(static_root) and index_file.is_file()):
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": {"code": "NOT_FOUND", "message": "Not found"}},
+        )
+
+    # Distinguish legitimate client routes from unrecognized paths:
+    # 1. Recognized client routes return HTTP 200 with the SPA shell
+    # 2. Unrecognized routes return HTTP 404 with the SPA shell so the browser displays <NotFoundPage />
+    if is_valid_client_route(full_path):
+        return FileResponse(index_file, status_code=200)
+
+    return FileResponse(index_file, status_code=404)
+
+

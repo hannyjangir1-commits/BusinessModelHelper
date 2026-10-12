@@ -403,7 +403,7 @@ export const CopilotWorkspaceView: React.FC<CopilotWorkspaceViewProps> = ({
                     </div>
                     <p className="text-slate-600">{rev.user_query}</p>
                   </div>
-                  <span className="text-[10px] text-slate-400 whitespace-nowrap">
+                  <span className="text-xs font-medium text-slate-600 whitespace-nowrap">
                     {new Date(rev.created_at).toLocaleDateString()}
                   </span>
                 </div>

@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User } from '../types';
+import { LoginPayload, RegisterPayload, User } from '../types';
 import { api } from '../services/api';
+import { clearLegacyProjectDraft, clearProjectDraft } from '../utils/projectDraft';
 
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (data: any) => Promise<User>;
-  register: (data: any) => Promise<User>;
-  logout: () => Promise<void>;
+  login: (data: LoginPayload) => Promise<User>;
+  register: (data: RegisterPayload) => Promise<User>;
+  logout: (optionsOrSkipServer?: boolean | { skipServerRequest?: boolean }) => Promise<void>;
   refreshUser: () => Promise<void>;
   updateUser: (updated: User) => void;
 }
@@ -22,7 +23,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const u = await api.auth.me();
       setUser(u);
-    } catch (err) {
+    } catch {
       setUser(null);
     } finally {
       setLoading(false);
@@ -33,21 +34,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshUser();
   }, []);
 
-  const login = async (data: any): Promise<User> => {
+  const login = async (data: LoginPayload): Promise<User> => {
+    clearLegacyProjectDraft();
     const res = await api.auth.login(data);
     setUser(res.user);
     return res.user;
   };
 
-  const register = async (data: any): Promise<User> => {
+  const register = async (data: RegisterPayload): Promise<User> => {
+    clearLegacyProjectDraft();
     const res = await api.auth.register(data);
     setUser(res.user);
     return res.user;
   };
 
-  const logout = async () => {
+  const logout = async (optionsOrSkipServer?: boolean | { skipServerRequest?: boolean }) => {
+    const skipServerRequest =
+      typeof optionsOrSkipServer === 'boolean'
+        ? optionsOrSkipServer
+        : Boolean(optionsOrSkipServer?.skipServerRequest);
+
     try {
-      await api.auth.logout();
+      if (user?.id) {
+        clearProjectDraft(user.id);
+      }
+      clearLegacyProjectDraft();
+      if (!skipServerRequest) {
+        try {
+          await api.auth.logout();
+        } catch {
+          // If server logout fails (e.g. session already expired or cleared by server),
+          // local cleanup must still succeed deterministically.
+        }
+      }
     } finally {
       setUser(null);
     }

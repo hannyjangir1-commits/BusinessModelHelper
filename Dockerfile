@@ -33,9 +33,10 @@ ENV PYTHONUNBUFFERED=1 \
     PORT=8000 \
     APP_ENV=production
 
-# Install Python production dependencies
+# Install Python production dependencies with reproducible constraints
 COPY backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/constraints.txt ./constraints.txt
+RUN pip install --no-cache-dir -r requirements.txt -c constraints.txt
 
 # Copy Python backend code and migrations
 COPY backend/app ./app
@@ -45,8 +46,20 @@ COPY backend/alembic.ini ./alembic.ini
 # Copy compiled frontend assets from Stage 1 into /app/static
 COPY --from=frontend-builder /app/frontend/dist ./static
 
+# Create non-root system user and group
+RUN groupadd --system --gid 10001 appgroup && \
+    useradd --system --uid 10001 --gid appgroup --no-create-home appuser
+
+# Set ownership and secure read/execute permissions for application files
+RUN chown -R appuser:appgroup /app && \
+    chmod -R 755 /app
+
+# Switch to non-root user
+USER appuser:appgroup
+
 # Expose dynamic application port (Render assigns $PORT)
 EXPOSE 8000
 
-# Run additive Alembic migrations then start server honoring $PORT
-CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Start Uvicorn server honoring dynamic $PORT and binding to 0.0.0.0
+# Note: Migrations are executed via Render preDeployCommand, not container startup
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

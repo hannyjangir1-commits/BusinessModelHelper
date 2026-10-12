@@ -1,7 +1,17 @@
-"""Application configuration using Pydantic Settings v2."""
+"""Application configuration using Pydantic Settings v2.
+
+Secret Key Generation:
+Generate a secure random secret key using:
+    python -c "import secrets; print(secrets.token_hex(32))"
+or:
+    openssl rand -hex 32
+Set the generated key in your hosting environment configuration (e.g. Render dashboard)
+as SECRET_KEY. Never commit secrets to version control or print them to stdout/logs.
+"""
 
 from functools import lru_cache
-from typing import List
+from typing import Any, List
+
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -55,6 +65,12 @@ class Settings(BaseSettings):
         description="Comma-separated allowed CORS origins",
     )
 
+    # Public Site URL & SEO
+    public_site_url: str = Field(
+        default="",
+        description="Public canonical site URL for production deployment (e.g. https://your-service.onrender.com)",
+    )
+
     # Logging
     log_level: str = Field(default="INFO", description="Log level: DEBUG, INFO, WARNING, ERROR")
 
@@ -62,19 +78,72 @@ class Settings(BaseSettings):
     @classmethod
     def validate_app_env(cls, v: str) -> str:
         allowed = {"development", "production", "test"}
-        val = v.lower()
+        val = v.strip().lower()
         if val not in allowed:
-            return "development"
+            raise ValueError(f"Invalid APP_ENV '{v}'. Allowed environments are: {', '.join(sorted(allowed))}")
         return val
+
+    @field_validator("session_same_site")
+    @classmethod
+    def validate_session_same_site(cls, v: str) -> str:
+        allowed = {"lax", "strict", "none"}
+        val = v.strip().lower()
+        if val not in allowed:
+            raise ValueError(f"Invalid SESSION_SAME_SITE '{v}'. Allowed values are: {', '.join(sorted(allowed))}")
+        return val
+
+    @model_validator(mode="before")
+    @classmethod
+    def set_environment_defaults(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            env = str(data.get("app_env", "")).strip().lower()
+            # In production, default session_https_only to True unless explicitly provided
+            if env == "production" and "session_https_only" not in data:
+                data["session_https_only"] = True
+        return data
 
     @model_validator(mode="after")
     def validate_production_security(self) -> "Settings":
         if self.app_env.lower() == "production":
-            if not self.secret_key or "insecure" in self.secret_key.lower() or "development" in self.secret_key.lower():
-                raise ValueError("In production, SECRET_KEY must be a cryptographically secure key and not the default development secret.")
+            key = self.secret_key.strip() if self.secret_key else ""
+            if not key:
+                raise ValueError(
+                    "In production, SECRET_KEY must be a cryptographically secure key and cannot be empty. "
+                    "Generate a secure key with: python -c \"import secrets; print(secrets.token_hex(32))\""
+                )
+            if len(key) < 32:
+                raise ValueError(
+                    f"In production, SECRET_KEY must be a cryptographically secure key of at least 32 characters "
+                    f"(received {len(key)}). Generate a secure key with: python -c \"import secrets; print(secrets.token_hex(32))\""
+                )
+            lower_key = key.lower()
+            weak_keywords = [
+                "insecure",
+                "development",
+                "changeme",
+                "default",
+                "example",
+                "placeholder",
+                "12345678",
+                "password",
+            ]
+            for kw in weak_keywords:
+                if kw in lower_key:
+                    raise ValueError(
+                        f"In production, SECRET_KEY must be a cryptographically secure key and not contain weak or default patterns such as '{kw}'."
+                    )
+
             if not self.gemini_api_key or not self.gemini_api_key.strip():
                 raise ValueError("In production, GEMINI_API_KEY must be configured.")
+
+            if not self.session_https_only:
+                raise ValueError("In production, SESSION_HTTPS_ONLY must be set to True to ensure Secure cookies.")
+
+            if self.session_same_site.lower() == "none" and not self.session_https_only:
+                raise ValueError("SameSite=None cookies require SESSION_HTTPS_ONLY=True.")
+
         return self
+
 
     @property
     def is_production(self) -> bool:

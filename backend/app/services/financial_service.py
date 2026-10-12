@@ -149,6 +149,7 @@ def calculate_monthly_projections(
                 direct_variable_costs=direct_var,
                 payment_fees=payment_fees,
                 total_variable_costs=total_var,
+                cogs=direct_var,
                 gross_profit=gross_profit,
                 operating_expenses=fixed_operating,
                 operating_profit=operating_profit,
@@ -162,14 +163,31 @@ def calculate_monthly_projections(
             )
         )
 
-    # Runway calculation
-    # If initial cash flows are negative, compute months until starting cash is depleted
-    first_month_burn = monthly_rows[0].net_cash_flow
-    if first_month_burn < 0:
-        monthly_burn = abs(first_month_burn)
-        estimated_runway = round(assumptions.starting_cash / monthly_burn, 1) if monthly_burn > 0 else None
-    else:
-        estimated_runway = None
+    # Runway calculation accounting for projected cash balances over time.
+    # Must NOT treat one-time first-month startup expenses as recurring monthly burn.
+    estimated_runway = None
+    for row in monthly_rows:
+        if row.closing_cash <= 0:
+            if row.opening_cash <= 0:
+                estimated_runway = float(max(0, row.month - 1))
+            else:
+                monthly_burn = abs(row.net_cash_flow)
+                if monthly_burn > 0:
+                    fraction = row.opening_cash / monthly_burn
+                    estimated_runway = round((row.month - 1) + fraction, 1)
+                else:
+                    estimated_runway = float(row.month - 1)
+            break
+
+    # If cash is never depleted during the forecast horizon:
+    # If the business is still burning cash in the final forecast month, extrapolate based on ending recurring burn.
+    # If the business is cash-flow positive or break-even, runway is None (self-sustaining).
+    if estimated_runway is None and len(monthly_rows) > 0:
+        last_row = monthly_rows[-1]
+        if last_row.net_cash_flow < 0 and last_row.closing_cash > 0:
+            ending_burn = abs(last_row.net_cash_flow)
+            extra_months = last_row.closing_cash / ending_burn
+            estimated_runway = round(len(monthly_rows) + extra_months, 1)
 
     # Capital requirement calculation
     if min_cash < 0:

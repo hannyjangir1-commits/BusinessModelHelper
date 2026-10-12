@@ -23,6 +23,45 @@ export function safeText(val: any, fallback: string = ''): string {
 }
 
 /**
+ * Extracts the primary question text safely from any question item shape.
+ */
+export function getQuestionText(question: any): string {
+  if (typeof question === 'string') return question;
+  if (typeof question === 'object' && question !== null) {
+    return (
+      question.question_text ||
+      question.question ||
+      question.text ||
+      question.title ||
+      question.description ||
+      (Object.keys(question).length > 0 ? JSON.stringify(question) : '')
+    );
+  }
+  return String(question || '');
+}
+
+/**
+ * Extracts the focus category from a question item or raw object.
+ */
+export function getQuestionFocusCategory(question: any): string | undefined {
+  if (typeof question === 'object' && question !== null) {
+    return question.focus_category || question.category || question.focus;
+  }
+  return undefined;
+}
+
+/**
+ * Extracts the rationale from a question item or raw object.
+ */
+export function getQuestionRationale(question: any): string | undefined {
+  if (typeof question === 'object' && question !== null) {
+    return question.rationale || question.reasoning || question.why;
+  }
+  return undefined;
+}
+
+
+/**
  * Normalizes ValidationReportData so that all fields, especially interview_questions,
  * conform to structured expectations regardless of backend variations.
  */

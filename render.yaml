@@ -5,7 +5,8 @@ services:
     dockerfilePath: ./Dockerfile
     plan: starter
     region: oregon
-    healthCheckPath: /health
+    healthCheckPath: /ready
+    preDeployCommand: alembic upgrade head
     autoDeploy: true
     envVars:
       - key: APP_ENV

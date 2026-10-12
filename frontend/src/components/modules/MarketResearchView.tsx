@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   AlertCircle,
-  AlertTriangle,
   Compass,
   ExternalLink,
   Layers,
@@ -624,7 +623,7 @@ export const MarketResearchView: React.FC<MarketResearchViewProps> = ({
                     >
                       {src.title || src.url} <ExternalLink className="w-3 h-3" />
                     </a>
-                    <span className="text-[10px] text-slate-400">
+                    <span className="text-xs font-medium text-slate-600">
                       Retrieved {src.retrieved_at ? new Date(src.retrieved_at).toLocaleDateString() : 'Recent'}
                     </span>
                   </div>

@@ -15,6 +15,7 @@ from app.models.user import User
 from app.schemas.market_research import MarketResearchReportData, SourceItem
 from app.services.ai.client import GeminiAIClient
 from app.services.ai.prompts import PROMPT_VERSION
+from app.services.project_service import save_blueprint_version
 from app.services.research.provider import BaseResearchProvider, get_research_provider
 
 logger = logging.getLogger(__name__)
@@ -237,23 +238,13 @@ def generate_market_research_report(
         # 4. Parse and validate schema
         validated_data = validate_research_response(raw_text, sources)
 
-        # 5. Determine next version
-        latest_version = db.execute(
-            select(func.coalesce(func.max(Blueprint.version), 0)).where(
-                Blueprint.project_id == project.id,
-                Blueprint.module_type == "market_research",
-            )
-        ).scalar_one()
-        new_version = latest_version + 1
-
-        # 6. Save persistent blueprint
-        blueprint = Blueprint(
+        # 5. Save persistent blueprint safely handling concurrency
+        blueprint = save_blueprint_version(
+            db=db,
             project_id=project.id,
             module_type="market_research",
-            version=new_version,
             content_json=validated_data.model_dump(),
         )
-        db.add(blueprint)
 
         # 7. Complete audit run
         db.execute(

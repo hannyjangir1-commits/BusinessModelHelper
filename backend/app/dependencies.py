@@ -33,6 +33,15 @@ def get_current_user_and_session(
     if not payload or "user_id" not in payload:
         raise UnauthorizedError("Session expired or invalid. Please log in again.")
 
+    from app.core.sessions import is_session_revoked
+    if is_session_revoked(
+        db,
+        user_id=payload["user_id"],
+        session_id=payload.get("session_id", ""),
+        token_created_at=payload.get("created_at"),
+    ):
+        raise UnauthorizedError("Session has been revoked. Please log in again.")
+
     user = db.execute(select(User).where(User.id == payload["user_id"])).scalar_one_or_none()
     if not user:
         raise UnauthorizedError("User account no longer exists.")
@@ -79,16 +88,23 @@ def verify_csrf(
 
 def check_generation_rate_limit(
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> None:
     """Enforce sliding-window rate limits on resource-intensive AI generation and external research."""
     from app.core.exceptions import RateLimitExceededError
     from app.core.rate_limiting import generation_rate_limiter
 
     rate_key = f"gen:{current_user.id}"
-    limited, retry_after = generation_rate_limiter.is_rate_limited(rate_key, max_attempts=15, window_seconds=60)
+    limited, retry_after = generation_rate_limiter.is_rate_limited(
+        rate_key,
+        max_attempts=15,
+        window_seconds=60,
+        db=db,
+    )
     if limited:
         raise RateLimitExceededError(
             f"Generation rate limit exceeded. Please wait {retry_after}s before requesting another generation.",
             retry_after=retry_after,
         )
+
 

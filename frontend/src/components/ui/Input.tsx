@@ -9,7 +9,8 @@ export interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> 
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, helperText, id, type = 'text', className = '', ...props }, ref) => {
-    const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
+    const generatedId = React.useId();
+    const inputId = id || (label ? `${label.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${generatedId}` : generatedId);
     const [showPassword, setShowPassword] = useState(false);
     const isPassword = type === 'password';
     const computedType = isPassword ? (showPassword ? 'text' : 'password') : type;
@@ -28,19 +29,18 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             type={computedType}
             aria-invalid={Boolean(error)}
-            className={`w-full px-3.5 py-2 text-sm bg-white border rounded-lg transition-colors focus:outline-none focus:ring-2 focus:border-transparent ${
+            className={`w-full px-3.5 py-2 text-sm bg-white border rounded-lg transition-colors focus:outline-hidden focus:ring-2 focus:border-transparent ${
               error
                 ? 'border-rose-400 focus:ring-rose-400 text-rose-900 placeholder-rose-300'
                 : 'border-slate-300 focus:ring-indigo-500 text-slate-900 placeholder-slate-400'
-            } ${isPassword ? 'pr-10' : ''} ${className}`}
+            } ${isPassword ? 'pr-11' : ''} ${className}`}
             {...props}
           />
           {isPassword && (
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
-              tabIndex={-1}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-500 hover:text-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 rounded-lg transition-colors cursor-pointer"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

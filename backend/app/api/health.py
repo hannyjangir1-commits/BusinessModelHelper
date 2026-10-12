@@ -33,7 +33,8 @@ def readiness_check(response: Response, db: Session = Depends(get_db)) -> dict:
     db_status = "connected"
 
     try:
-        db.execute(text("SELECT 1"))
+        # Bounded query execution timeout (3 seconds) to prevent hanging readiness probes
+        db.execute(text("SELECT 1").execution_options(timeout=3))
     except Exception as e:
         logger.error("Readiness check database failure", exc_info=True)
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE

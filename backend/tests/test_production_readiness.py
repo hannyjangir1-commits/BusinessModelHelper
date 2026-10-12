@@ -99,14 +99,26 @@ def test_production_settings_validation_blocks_insecure_defaults():
             gemini_api_key="",
         )
 
-    # 3. Valid secure settings in production -> success
+    # 3. Insecure session cookies in production -> error
+    with pytest.raises(ValueError, match="SESSION_HTTPS_ONLY must be set to True"):
+        Settings(
+            app_env="production",
+            secret_key="f" * 64,
+            gemini_api_key="valid-key-here",
+            session_https_only=False,
+        )
+
+    # 4. Valid secure settings in production -> success
     prod_settings = Settings(
         app_env="production",
         secret_key="f" * 64,
         gemini_api_key="valid-key-here",
+        session_https_only=True,
     )
     assert prod_settings.is_production is True
     assert prod_settings.gemini_model == "gemini-3.5-flash-lite"
+    assert prod_settings.session_https_only is True
+
 
 
 def test_ai_generation_rate_limiter_blocks_burst_abuse():
@@ -140,3 +152,67 @@ def test_health_and_readiness_endpoints_operational(client):
     r_json = ready_res.json()
     assert r_json["status"] == "ready"
     assert r_json["database"] == "connected"
+
+
+def test_readiness_failure_returns_503(client, monkeypatch):
+    """Verify that readiness probe returns 503 Service Unavailable when DB is unreachable."""
+    from app.database import get_db
+
+    def failing_db():
+        class MockFailingSession:
+            def execute(self, *args, **kwargs):
+                raise RuntimeError("Database connection timed out or unreachable")
+
+        yield MockFailingSession()
+
+    from app.main import app
+    app.dependency_overrides[get_db] = failing_db
+    try:
+        res = client.get("/ready")
+        assert res.status_code == 503
+        data = res.json()
+        assert data["status"] == "unhealthy"
+        assert data["database"] == "unavailable"
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def test_render_blueprint_and_docker_configuration():
+    """Verify deployment hardening across render.yaml, Dockerfile, docker-compose, and .dockerignore."""
+    from pathlib import Path
+
+    repo_root = Path(__file__).resolve().parents[2]
+
+    # 1. render.yaml configuration
+    render_yaml = repo_root / "render.yaml"
+    assert render_yaml.exists(), "render.yaml must exist"
+    render_content = render_yaml.read_text(encoding="utf-8")
+    assert "healthCheckPath: /ready" in render_content, "render.yaml must use /ready for readiness probing"
+    assert "preDeployCommand: alembic upgrade head" in render_content, "render.yaml must use preDeployCommand for migrations"
+    assert "plan: starter" in render_content, "render.yaml must declare plan: starter to support preDeployCommand on Render"
+
+    # 2. Dockerfile non-root and decoupled migrations (single execution path)
+    dockerfile = repo_root / "Dockerfile"
+    assert dockerfile.exists(), "Dockerfile must exist"
+    docker_content = dockerfile.read_text(encoding="utf-8")
+    assert "USER appuser:appgroup" in docker_content, "Dockerfile must run as non-root user"
+    assert "alembic upgrade" not in docker_content.split("CMD")[-1], "Dockerfile CMD must not run alembic upgrade on startup"
+    assert "RUN alembic upgrade" not in docker_content, "Dockerfile build step must not execute live database migrations"
+    assert "--host 0.0.0.0" in docker_content, "Dockerfile must bind to 0.0.0.0 for Render port forwarding"
+    assert "${PORT:-8000}" in docker_content, "Dockerfile must honor dynamic Render $PORT"
+
+    # 3. docker-compose.yml local-only loopback binding
+    compose_file = repo_root / "docker-compose.yml"
+    assert compose_file.exists(), "docker-compose.yml must exist"
+    compose_content = compose_file.read_text(encoding="utf-8")
+    assert "127.0.0.1:5432:5432" in compose_content, "docker-compose.yml must bind postgresql to 127.0.0.1 only"
+    assert "POSTGRES_PASSWORD" in compose_content, "docker-compose.yml must use environment variable for password"
+
+    # 4. .dockerignore excludes secrets
+    dockerignore = repo_root / ".dockerignore"
+    assert dockerignore.exists(), ".dockerignore must exist"
+    ignore_content = dockerignore.read_text(encoding="utf-8")
+    assert ".env" in ignore_content
+    assert "*.key" in ignore_content
+    assert "*.pem" in ignore_content
+

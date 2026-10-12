@@ -62,30 +62,50 @@ This guide details the step-by-step procedure for deploying the **AI Business Ar
 | `DATABASE_URL` | *Use Render Internal Connection String* | Automatically converted to `postgresql+psycopg://` |
 | `SECRET_KEY` | *Click 'Generate' in Render dashboard* | 64-character cryptographic hex secret |
 | `GEMINI_API_KEY` | `AIzaSy...` | Your Google Gemini API Key |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | Gemini model identifier |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | Gemini model identifier |
 | `SESSION_HTTPS_ONLY` | `true` | Enforces Secure flag on session cookies |
 | `SESSION_SAME_SITE` | `lax` | Cookie CSRF policy |
 | `LOG_LEVEL` | `INFO` | Logging verbosity |
 
 5. Configure **Health Check Path**:
-   - Set **Health Check Path** to `/health`.
+   - Set **Health Check Path** to `/ready` (verifies both FastAPI liveness and PostgreSQL database connectivity with a bounded 3s timeout).
 6. Click **Create Web Service**.
 
 ---
 
-### Step 3.3: Apply Database Migrations on Render
-Render builds the Docker container (building the frontend and packaging the backend) and spins up the instance.
+### Step 3.3: Database Migrations & Rolling Deployment Architecture
 
-To run initial database migrations:
-1. In the Web Service dashboard, navigate to the **Shell** tab.
-2. Run the migration command:
+#### Automated Migrations (Starter Plan via `render.yaml`)
+When deployed via `render.yaml` on the `Starter` plan, Render automatically executes:
+```yaml
+preDeployCommand: alembic upgrade head
+```
+- **Serialized Execution**: Runs once in an ephemeral container *before* new web instances start and before traffic is routed.
+- **Decoupled from Web Startup**: The web container `Dockerfile` does **not** run migrations on startup (`CMD ["sh", "-c", "exec uvicorn app.main:app ..."]`). This prevents multi-replica race conditions and avoids repeated migration checks when a web container restarts.
+
+#### Manual / Free Tier Single-Run Migration Procedure
+If deploying manually or on Render's **Free Tier** (where `preDeployCommand` is unsupported by Render):
+1. Never put `alembic upgrade head` in the container `CMD` or startup script.
+2. In the Render Dashboard, go to your Web Service -> **Shell** tab.
+3. Run the single-run command manually before rolling out code updates:
    ```bash
    alembic upgrade head
    ```
-3. You will see:
-   ```
-   INFO  [alembic.runtime.migration] Running upgrade  -> 51b1e8b864ff, initial_schema
-   ```
+4. Confirm migration success (`INFO  [alembic.runtime.migration] Running upgrade ...`) before triggering the new build deployment.
+
+#### Backward-Compatible Expand/Contract Strategy for Rolling Deploys
+During a Render rolling deployment, incoming requests are handled concurrently by both existing (old code) and newly provisioning (new code) container replicas. Therefore, database schema changes must be backward-compatible:
+1. **Phase 1 (Expand)**:
+   - Add new columns as `nullable` or with sensible database defaults.
+   - Add new tables or non-blocking indexes.
+   - Do **not** drop or rename existing columns, and do **not** add restrictive `NOT NULL` constraints to active tables in use by the running code.
+2. **Phase 2 (Deploy Code)**:
+   - Deploy application code that writes to both old and new structures (or safely reads the new structure with fallbacks).
+   - Old code continues to function against the expanded database schema without errors.
+3. **Phase 3 (Contract)**:
+   - After the new deployment is fully active and all old container replicas are terminated, execute a subsequent migration to remove deprecated columns or enforce stricter constraints.
+
+> **Note on Downtime Claims**: We do not promise unconditional "zero downtime." True zero downtime during rolling deploys requires strictly adhering to the 3-phase expand/contract lifecycle, non-blocking DDL locks, and ensuring connection pools recycle cleanly.
 
 ---
 
@@ -94,7 +114,27 @@ Once deployed:
 1. Visit your public Render URL: `https://ai-business-architect.onrender.com`.
 2. Confirm the landing page renders with responsive styling.
 3. Test `/health`: verify `status: "healthy"`.
-4. Test `/ready`: verify `database: "connected"`.
+4. Test `/ready`: verify `status: "ready"` and `database: "connected"`.
 5. Register a new user account, accepting the Terms and Privacy Policy.
 6. Create a project and generate both the Business Model Canvas and Technology Stack.
 7. Click **Export PDF Blueprint** and verify the downloaded document.
+
+---
+
+## 5. GitHub Branch Protection & CI Configuration
+A GitHub Actions CI workflow is provided in `.github/workflows/ci.yml`.
+
+> **Important**: The CI workflow alone does not prevent developers or automated tools from merging or pushing directly to `main`. You must explicitly configure branch protection rules in GitHub:
+
+1. Navigate to your repository on GitHub: `Settings` → `Branches`.
+2. Under **Branch protection rules**, click **Add branch protection rule**.
+3. Set **Branch name pattern** to `main`.
+4. Check **Require a pull request before merging**.
+5. Check **Require status checks to pass before merging**.
+6. Check **Require branches to be up to date before merging**.
+7. In the status checks search box, select:
+   - `Backend Tests (Pytest)`
+   - `Frontend Lint, Test & Build`
+   - `Docker Production Image Build`
+8. Check **Do not allow bypassing the above settings** (or enforce for administrators).
+9. Click **Save changes**.

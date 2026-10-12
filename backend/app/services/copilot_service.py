@@ -6,6 +6,7 @@ import logging
 from typing import Any, Dict, List, Optional
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.exceptions import ConflictError, NotFoundError, ValidationError
 from app.models.blueprint import Blueprint
@@ -274,7 +275,7 @@ def accept_copilot_proposal(
     project_id: str,
     proposal_id: str,
 ) -> CopilotProposalResponse:
-    """Apply an accepted proposal to the underlying persistent module."""
+    """Apply an accepted proposal to the underlying persistent module atomically."""
     get_user_project_by_id(db, user, project_id)
 
     rev = (
@@ -288,37 +289,41 @@ def accept_copilot_proposal(
     if rev.status != "pending":
         raise ConflictError(f"Proposal has already been resolved with status '{rev.status}'.")
 
-    # Apply edit to target module
-    if rev.target_module == "business_model":
-        bmc = (
-            db.query(Blueprint)
-            .filter(Blueprint.project_id == project_id, Blueprint.module_type == "business_model")
-            .order_by(Blueprint.version.desc())
-            .first()
-        )
-        if bmc and isinstance(bmc.content_json, dict):
-            updated_json = dict(bmc.content_json)
-            updated_json[rev.target_section] = rev.proposal_content
-            bmc.content_json = updated_json
-            bmc.updated_at = datetime.now(timezone.utc)
+    # 1. Fetch target blueprint
+    target_bp = (
+        db.query(Blueprint)
+        .filter(Blueprint.project_id == project_id, Blueprint.module_type == rev.target_module)
+        .order_by(Blueprint.version.desc())
+        .first()
+    )
+    if not target_bp:
+        raise NotFoundError(f"Target blueprint module '{rev.target_module}' not found for project.")
 
-    elif rev.target_module == "technology_stack":
-        tech = (
-            db.query(Blueprint)
-            .filter(Blueprint.project_id == project_id, Blueprint.module_type == "technology_stack")
-            .order_by(Blueprint.version.desc())
-            .first()
-        )
-        if tech and isinstance(tech.content_json, dict):
-            updated_json = dict(tech.content_json)
-            updated_json[rev.target_section] = rev.proposal_content
-            tech.content_json = updated_json
-            tech.updated_at = datetime.now(timezone.utc)
+    # 2. Validate blueprint content
+    if not isinstance(target_bp.content_json, dict):
+        raise ValidationError("Target blueprint content is not a valid JSON object.")
 
-    # Mark proposal accepted
-    rev.status = "accepted"
-    rev.resolved_at = datetime.now(timezone.utc)
-    db.commit()
+    if not rev.target_section:
+        raise ValidationError("Proposal does not specify a target section.")
+
+    # 3. Apply edit atomically and mark accepted
+    try:
+        with db.begin_nested():
+            updated_json = dict(target_bp.content_json)
+            updated_json[rev.target_section] = rev.proposal_content
+            target_bp.content_json = updated_json
+            flag_modified(target_bp, "content_json")
+            target_bp.updated_at = datetime.now(timezone.utc)
+
+            # Mark proposal accepted only after blueprint is successfully updated
+            rev.status = "accepted"
+            rev.resolved_at = datetime.now(timezone.utc)
+            db.flush()
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
     db.refresh(rev)
 
     return CopilotProposalResponse(

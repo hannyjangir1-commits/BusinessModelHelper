@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, Layers, Sparkles } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, ArrowRight, Check, Sparkles } from 'lucide-react';
 import { api } from '../services/api';
 import { Button } from '../components/ui/Button';
 import { Card, CardContent } from '../components/ui/Card';
@@ -7,55 +7,55 @@ import { Input } from '../components/ui/Input';
 import { Textarea } from '../components/ui/Textarea';
 import { Select } from '../components/ui/Select';
 import { Alert } from '../components/ui/Alert';
+import { useAuth } from '../context/AuthContext';
+import { User } from '../types';
+import {
+  ProjectFormData,
+  clearProjectDraft,
+  loadProjectDraft,
+  saveProjectDraft,
+} from '../utils/projectDraft';
 
 interface CreateProjectPageProps {
   onNavigate: (path: string, projectId?: string) => void;
+  userOverride?: User | null;
 }
 
-const DRAFT_KEY = 'aba_project_intake_draft';
+export const CreateProjectPage: React.FC<CreateProjectPageProps> = ({ onNavigate, userOverride }) => {
+  const { user } = useAuth();
+  const currentUser = userOverride !== undefined ? userOverride : user;
+  const userId = currentUser?.id;
 
-export const CreateProjectPage: React.FC<CreateProjectPageProps> = ({ onNavigate }) => {
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Form State
-  const [formData, setFormData] = useState({
-    name: '',
-    industry: '',
-    idea_description: '',
-    business_stage: 'idea',
-    target_market: '',
-    target_audience: '',
-    budget_amount: '',
-    budget_currency: 'USD',
-    team_size: 'Solo',
-    technical_preferences: '',
-    constraints: '',
-  });
+  // Requirement 1: Restore saved draft before persistence runs via validated lazy state initializer
+  const [formData, setFormData] = useState<ProjectFormData>(() => loadProjectDraft(userId));
 
-  // Load draft from localStorage on mount
+  // Requirement 1 & 2: Gating refs so initial render or account switches never overwrite saved drafts
+  const isDirtyRef = useRef<boolean>(false);
+  const loadedUserIdRef = useRef<string | undefined>(userId);
+
+  // Sync draft if authenticated user changes (Account A -> Account B)
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(DRAFT_KEY);
-      if (saved) {
-        setFormData(JSON.parse(saved));
-      }
-    } catch (e) {
-      // ignore
+    if (userId !== loadedUserIdRef.current) {
+      loadedUserIdRef.current = userId;
+      isDirtyRef.current = false;
+      setFormData(loadProjectDraft(userId));
     }
-  }, []);
+  }, [userId]);
 
-  // Save draft whenever formData changes
+  // Save draft whenever formData changes, strictly gated and scoped to authenticated user
   useEffect(() => {
-    try {
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
-    } catch (e) {
-      // ignore
-    }
-  }, [formData]);
+    if (!userId) return; // Do not persist sensitive intake data for anonymous users
+    if (!isDirtyRef.current) return; // Prevent initial mount from touching or overwriting storage
 
-  const handleChange = (field: string, value: any) => {
+    saveProjectDraft(userId, formData);
+  }, [formData, userId]);
+
+  const handleChange = (field: keyof ProjectFormData, value: any) => {
+    isDirtyRef.current = true;
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -88,6 +88,16 @@ export const CreateProjectPage: React.FC<CreateProjectPageProps> = ({ onNavigate
     setCurrentStep((prev) => Math.max(prev - 1, 1));
   };
 
+  /**
+   * Cancel navigation flow:
+   * Deliberately preserves the in-progress draft for the authenticated user so work
+   * is not accidentally lost when navigating back to the dashboard.
+   * The draft will only be deleted upon successful project creation or explicit user logout.
+   */
+  const handleCancel = () => {
+    onNavigate('/dashboard');
+  };
+
   const handleSubmit = async () => {
     if (!validateStep(1)) return;
 
@@ -109,7 +119,10 @@ export const CreateProjectPage: React.FC<CreateProjectPageProps> = ({ onNavigate
       };
 
       const project = await api.projects.create(payload);
-      localStorage.removeItem(DRAFT_KEY);
+      // Clean up draft upon successful project creation
+      if (userId) {
+        clearProjectDraft(userId);
+      }
       onNavigate(`/projects/${project.id}`, project.id);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to create project. Please verify inputs.');
@@ -338,7 +351,7 @@ export const CreateProjectPage: React.FC<CreateProjectPageProps> = ({ onNavigate
                 Back
               </Button>
             ) : (
-              <Button variant="ghost" onClick={() => onNavigate('/dashboard')}>
+              <Button variant="ghost" onClick={handleCancel}>
                 Cancel
               </Button>
             )}

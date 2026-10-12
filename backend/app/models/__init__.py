@@ -8,6 +8,7 @@ from app.models.legal_acceptance import LegalAcceptance
 from app.models.financial_model import FinancialModel
 from app.models.roadmap_task import RoadmapTask
 from app.models.copilot_revision import CopilotRevision
+from app.models.security import RevokedSession, RateLimitEntry
 
 __all__ = [
     "User",
@@ -18,4 +19,7 @@ __all__ = [
     "FinancialModel",
     "RoadmapTask",
     "CopilotRevision",
+    "RevokedSession",
+    "RateLimitEntry",
 ]
+

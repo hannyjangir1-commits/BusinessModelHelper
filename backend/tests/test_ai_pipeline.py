@@ -150,3 +150,61 @@ def test_ai_failure_preserves_existing_blueprint(db):
     )
     assert failed_run is not None
     assert failed_run.error_code == "AI_RATE_LIMIT"
+
+
+def test_gemini_client_timeout_http_options():
+    """Verify GeminiAIClient properly configures supported HttpOptions timeout in milliseconds."""
+    from app.services.ai.client import GeminiAIClient
+
+    client = GeminiAIClient(api_key="test-api-key", timeout=12.5)
+    assert client.timeout == 12.5
+    genai_client = client._get_client()
+    assert getattr(genai_client._api_client, "_http_options").timeout == 12500
+
+
+def test_gemini_client_generate_config_receives_timeout():
+    """Verify GenerateContentConfig receives per-attempt HttpOptions timeout."""
+    from unittest.mock import MagicMock
+    from google.genai import types
+    from app.services.ai.client import GeminiAIClient
+
+    client = GeminiAIClient(api_key="test-api-key", timeout=10.0, max_retries=1)
+    mock_genai = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = '{"success": true}'
+    mock_response.usage_metadata = None
+    mock_genai.models.generate_content.return_value = mock_response
+    client._client = mock_genai
+
+    client.generate(system_instruction="sys", user_prompt="prompt")
+    assert mock_genai.models.generate_content.called
+    call_kwargs = mock_genai.models.generate_content.call_args.kwargs
+    cfg = call_kwargs["config"]
+    assert isinstance(cfg.http_options, types.HttpOptions)
+    assert cfg.http_options.timeout is not None
+    assert cfg.http_options.timeout <= 10000
+
+
+def test_gemini_client_timeout_bounds_retry_budget():
+    """Verify retry loop does not exceed intended time budget indefinitely."""
+    import time
+    from unittest.mock import MagicMock
+    import httpx
+    from app.services.ai.client import GeminiAIClient
+    from app.services.ai.errors import AITimeoutError
+
+    # Budget is 0.05 seconds with 5 max_retries
+    client = GeminiAIClient(api_key="test-api-key", timeout=0.05, max_retries=5)
+    mock_genai = MagicMock()
+    mock_genai.models.generate_content.side_effect = httpx.ReadTimeout("Request timed out")
+    client._client = mock_genai
+
+    start = time.perf_counter()
+    with pytest.raises(AITimeoutError) as exc_info:
+        client.generate(system_instruction="sys", user_prompt="prompt")
+    duration = time.perf_counter() - start
+
+    assert "timed out" in str(exc_info.value).lower()
+    # Ensure retry loop aborted early rather than sleeping 2^1 + 2^2 + 2^3 + ... seconds (~60s)
+    assert duration < 1.0, f"Retry loop exceeded budget; took {duration}s"
+

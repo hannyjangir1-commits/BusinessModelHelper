@@ -2,23 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { safeText, normalizeValidationReportData } from '../src/utils/validator.ts';
+import {
+  safeText,
+  normalizeValidationReportData,
+  getQuestionText,
+  getQuestionFocusCategory,
+  getQuestionRationale,
+} from '../src/utils/validator.ts';
 
 /**
- * Functional component representation of the fixed ValidationQuestionCard
- * using standard React.createElement (matching IdeaValidatorView.tsx).
+ * Renders a question card utilizing the production extraction functions
+ * (matching IdeaValidatorView.tsx implementation without duplicating logic).
  */
-function ValidationQuestionCardComponent({ question, index }) {
-  const isObj = typeof question === 'object' && question !== null;
-  const questionText = isObj
-    ? question.question_text || question.question || question.text || ''
-    : String(question || '');
-  const focusCategory = isObj
-    ? question.focus_category || question.category || question.focus
-    : undefined;
-  const rationale = isObj
-    ? question.rationale || question.reasoning || question.why
-    : undefined;
+function RenderedQuestionCard({ question, index }) {
+  const text = getQuestionText(question);
+  const category = getQuestionFocusCategory(question);
+  const rationale = getQuestionRationale(question);
 
   return React.createElement(
     'div',
@@ -30,18 +29,18 @@ function ValidationQuestionCardComponent({ question, index }) {
         'div',
         { className: 'flex items-start gap-2.5' },
         React.createElement('span', { className: 'index-badge' }, index + 1),
-        React.createElement('p', { className: 'question-text' }, questionText || 'Unspecified validation inquiry')
+        React.createElement('p', { className: 'question-text' }, text || 'Unspecified validation inquiry')
       ),
-      focusCategory ? React.createElement('span', { className: 'category-badge' }, focusCategory) : null
+      category ? React.createElement('span', { className: 'category-badge' }, category) : null
     ),
     rationale ? React.createElement('p', { className: 'rationale-text' }, rationale) : null
   );
 }
 
 /**
- * Functional component representation of the fixed ValidationExperimentCard.
+ * Renders an experiment card utilizing safeText (matching IdeaValidatorView.tsx).
  */
-function ValidationExperimentCardComponent({ experiment, index }) {
+function RenderedExperimentCard({ experiment, index }) {
   return React.createElement(
     'div',
     { className: 'border rounded-xl p-3.5' },
@@ -52,15 +51,16 @@ function ValidationExperimentCardComponent({ experiment, index }) {
   );
 }
 
-test('REGRESSION REPRODUCTION: Passing an un-normalized question object directly as a React child throws React Error #31', () => {
+test('ISOLATED ROOT CAUSE DEMO: Direct un-normalized object passed as raw JSX child throws React Error #31', () => {
+  // This test isolates and documents the root cause: React itself throws Error #31
+  // whenever any un-normalized JS object is evaluated directly as a JSX child:
+  // e.g. <li key={idx}>{rawQuestionObject}</li>
   const rawQuestionObject = {
     question_text: 'How do you currently validate client demand before building an MVP?',
     focus_category: 'Past Behavior',
     rationale: 'Exposes actual user habits rather than polite speculation.',
   };
 
-  // This was the original offending expression in IdeaValidatorView:
-  // <li key={idx}>{q}</li> where q was rawQuestionObject
   assert.throws(
     () => {
       renderToStaticMarkup(React.createElement('li', null, rawQuestionObject));
@@ -75,6 +75,55 @@ test('REGRESSION REPRODUCTION: Passing an un-normalized question object directly
   );
 });
 
+test('REGRESSION FIX PROOF: Production normalizer and extractors safely ingest raw Gemini API response and render without React Error #31', () => {
+  // Feed the real/un-normalized API payload shape directly into the production pipeline
+  const rawApiResponse = {
+    overview: 'Strategic market validation report with high problem severity.',
+    interview_questions: [
+      {
+        question_text: 'How do you currently validate client demand before building an MVP?',
+        focus_category: 'Past Behavior',
+        rationale: 'Exposes actual user habits rather than polite speculation.',
+      },
+      {
+        question_text: 'What was the last software purchase you made for this workflow?',
+        focus_category: 'Budget Authority',
+        rationale: 'Verifies actual willingness to pay.',
+      },
+    ],
+    validation_experiments: [
+      {
+        experiment_name: 'Concierge Smoke Test',
+        experiment_type: 'Manual Prototype',
+        hypothesis: '60% of interviewed contractors express active interest',
+        success_criteria: '6/10 agree to test',
+      },
+    ],
+  };
+
+  // 1. Production normalizer processes the raw payload
+  const normalized = normalizeValidationReportData(rawApiResponse);
+  assert(normalized !== null);
+  assert.equal(normalized.interview_questions.length, 2);
+
+  // 2. Production card rendering executes with zero React exceptions
+  let renderedHtml = '';
+  assert.doesNotThrow(() => {
+    renderedHtml = normalized.interview_questions
+      .map((q, idx) =>
+        renderToStaticMarkup(React.createElement(RenderedQuestionCard, { question: q, index: idx }))
+      )
+      .join('');
+  });
+
+  // 3. Proves proper content extraction and safe rendering
+  assert(renderedHtml.includes('How do you currently validate client demand before building an MVP?'));
+  assert(renderedHtml.includes('Past Behavior'));
+  assert(renderedHtml.includes('Exposes actual user habits rather than polite speculation.'));
+  assert(renderedHtml.includes('What was the last software purchase you made for this workflow?'));
+  assert(renderedHtml.includes('Budget Authority'));
+});
+
 test('1. Validation question represented as an object with question_text and focus_category is safely rendered', () => {
   const structuredQuestion = {
     question_text: 'What was the last tool you paid for to solve this problem?',
@@ -83,7 +132,7 @@ test('1. Validation question represented as an object with question_text and foc
   };
 
   const html = renderToStaticMarkup(
-    React.createElement(ValidationQuestionCardComponent, { question: structuredQuestion, index: 0 })
+    React.createElement(RenderedQuestionCard, { question: structuredQuestion, index: 0 })
   );
 
   assert(typeof html === 'string');
@@ -91,6 +140,7 @@ test('1. Validation question represented as an object with question_text and foc
   assert(html.includes('Budget Authority'));
   assert(html.includes('Verifies actual willingness to pay.'));
 });
+
 
 test('2. Arrays of validation questions (objects, strings, alternate aliases) and experiments', () => {
   const rawData = {
@@ -135,7 +185,7 @@ test('2. Arrays of validation questions (objects, strings, alternate aliases) an
 
   // Render all questions and experiments through components without crashing
   const renderedQuestions = normalized.interview_questions.map((q, i) =>
-    renderToStaticMarkup(React.createElement(ValidationQuestionCardComponent, { key: i, question: q, index: i }))
+    renderToStaticMarkup(React.createElement(RenderedQuestionCard, { key: i, question: q, index: i }))
   );
   assert.equal(renderedQuestions.length, 4);
   assert(renderedQuestions[0].includes('Question 1'));
@@ -143,7 +193,7 @@ test('2. Arrays of validation questions (objects, strings, alternate aliases) an
   assert(renderedQuestions[2].includes('Plain string question without object wrapper'));
 
   const renderedExperiment = renderToStaticMarkup(
-    React.createElement(ValidationExperimentCardComponent, { experiment: normalized.validation_experiments[0], index: 0 })
+    React.createElement(RenderedExperimentCard, { experiment: normalized.validation_experiments[0], index: 0 })
   );
   assert(renderedExperiment.includes('Smoke Test'));
   assert(renderedExperiment.includes('Conversion rate &gt;= 5%'));
@@ -162,7 +212,7 @@ test('3. Optional or missing fields handled gracefully without exceptions', () =
 
   // Render question card with empty values
   const emptyHtml = renderToStaticMarkup(
-    React.createElement(ValidationQuestionCardComponent, { question: '', index: 0 })
+    React.createElement(RenderedQuestionCard, { question: '', index: 0 })
   );
   assert(emptyHtml.includes('Unspecified validation inquiry'));
 });
@@ -236,7 +286,7 @@ test('4. Complete report containing SWOT, risks, experiments, customer clarity, 
 
   // Render question cards
   const qHtml = normalized.interview_questions
-    .map((q, i) => renderToStaticMarkup(React.createElement(ValidationQuestionCardComponent, { question: q, index: i })))
+    .map((q, i) => renderToStaticMarkup(React.createElement(RenderedQuestionCard, { question: q, index: i })))
     .join('');
   assert(qHtml.includes('When was the last time a client disputed your invoice?'));
   assert(qHtml.includes('Past Behavior'));
@@ -266,7 +316,7 @@ test('5. Unexpected field types (numbers, booleans, nested unexpected objects)',
   // Render through component safely
   for (let i = 0; i < normalized.interview_questions.length; i++) {
     const html = renderToStaticMarkup(
-      React.createElement(ValidationQuestionCardComponent, { question: normalized.interview_questions[i], index: i })
+      React.createElement(RenderedQuestionCard, { question: normalized.interview_questions[i], index: i })
     );
     assert(typeof html === 'string');
     assert(html.length > 0);
@@ -298,13 +348,13 @@ test('6. Valid report renders cleanly without any React exceptions', () => {
   assert(normalized !== null);
 
   const qHtml = renderToStaticMarkup(
-    React.createElement(ValidationQuestionCardComponent, { question: normalized.interview_questions[0], index: 0 })
+    React.createElement(RenderedQuestionCard, { question: normalized.interview_questions[0], index: 0 })
   );
   assert(qHtml.includes('How do you currently track business expenses?'));
   assert(qHtml.includes('Existing Workaround'));
 
   const expHtml = renderToStaticMarkup(
-    React.createElement(ValidationExperimentCardComponent, { experiment: normalized.validation_experiments[0], index: 0 })
+    React.createElement(RenderedExperimentCard, { experiment: normalized.validation_experiments[0], index: 0 })
   );
   assert(expHtml.includes('Prototype Demo'));
   assert(expHtml.includes('Founders can finish model setup in under 5 minutes'));

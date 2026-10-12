@@ -124,7 +124,7 @@ class MonthlyProjection(BaseModel):
     @model_validator(mode="after")
     def populate_cogs(self) -> "MonthlyProjection":
         if self.cogs is None:
-            self.cogs = self.total_variable_costs
+            self.cogs = self.direct_variable_costs
         return self
 
 
@@ -171,7 +171,7 @@ class FinancialSummary(BaseModel):
         if self.initial_capital_required is None:
             self.initial_capital_required = self.recommended_startup_capital
         if self.runway_months is None:
-            self.runway_months = self.estimated_runway_months or 0.0
+            self.runway_months = self.estimated_runway_months
         if self.total_revenue_forecast is None:
             self.total_revenue_forecast = self.total_revenue
         if self.total_gross_profit_forecast is None:

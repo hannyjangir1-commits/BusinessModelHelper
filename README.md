@@ -47,7 +47,7 @@ AI Business Architect is an enterprise-grade, full-stack AI platform engineered 
 - **Data Validation**: Pydantic v2 & Pydantic Settings
 - **ORM & Database Driver**: SQLAlchemy 2.0 & Psycopg 3 (`postgresql+psycopg://`)
 - **Database Migrations**: Alembic
-- **AI Orchestration**: Official Google GenAI SDK (`google-genai` / `google-generativeai`)
+- **AI Orchestration**: Official Google GenAI SDK (`google-genai`)
 - **Document Generation**: ReportLab (Vector PDF generation)
 - **Password Security**: Argon2id via `argon2-cffi`
 - **Session Cryptography**: `itsdangerous`
@@ -71,8 +71,9 @@ AI Business Architect is an enterprise-grade, full-stack AI platform engineered 
 
 ### Prerequisites
 - **Python**: Version 3.12 or higher
-- **Node.js**: Version 20 or higher & npm
-- **Database**: Local PostgreSQL 15+ instance or Docker Compose
+- **Node.js**: `^20.19.0 || >=22.12.0` (Node 22 LTS recommended) & npm
+- **Database**: Local PostgreSQL 15+ instance, Docker Compose (`docker compose up -d db`), or local SQLite for automated tests
+- **Windows Launcher**: `start_local.bat` is provided for one-click startup on Windows.
 
 ### Step 1: Clone Repository & Configure Environment
 ```bash
@@ -82,14 +83,22 @@ cd BusinessModelHelper
 # Copy configuration template
 cp .env.example .env
 ```
-Edit `.env` and set your credentials:
-```ini
-APP_ENV=development
-SECRET_KEY=generate_a_random_32_byte_hex_string
-DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/ai_business_architect
-GEMINI_API_KEY=your_actual_gemini_api_key_here
-GEMINI_MODEL=gemini-2.5-flash
-```
+
+Edit `.env` to configure your local settings. Never paste real production secrets into version control.
+
+#### Key Environment Variables:
+| Variable | Required | Default / Safe Local Value | Description |
+|---|---|---|---|
+| `APP_ENV` | Yes | `development` | Environment mode (`development`, `production`, `test`). |
+| `SECRET_KEY` | Yes | *Generate safe 64-char hex* | Session signing & CSRF token key. Generate with: `python -c "import secrets; print(secrets.token_hex(32))"`. |
+| `DATABASE_URL` | Yes | `postgresql+psycopg://postgres:postgres@localhost:5432/ai_business_architect` | SQLAlchemy connection URL (uses Psycopg 3 driver). |
+| `GEMINI_API_KEY` | For Live AI | `your_gemini_api_key_here` | Google Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey). |
+| `GEMINI_MODEL` | Yes | `gemini-3.5-flash-lite` | Application runtime Gemini model. *(Note: Do not confuse this runtime setting with the Antigravity coding model).* |
+| `SESSION_COOKIE_NAME` | No | `aba_session` | Session cookie identifier. |
+| `SESSION_HTTPS_ONLY` | Yes | `false` | Set to `false` for local HTTP; must be `true` in production. |
+| `SESSION_SAME_SITE` | Yes | `lax` | Cookie CSRF defense policy (`lax`, `strict`). |
+| `RESEARCH_PROVIDER` | No | `duckduckgo` | External market research provider with SSRF safeguards. |
+| `PUBLIC_SITE_URL` | No | `http://localhost:8000` | Canonical public site URL (leave empty or set to local origin). |
 
 ### Step 2: Set Up Python Virtual Environment
 ```powershell
@@ -97,11 +106,13 @@ GEMINI_MODEL=gemini-2.5-flash
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r backend/requirements.txt
+# Optional development dependencies:
+pip install -r backend/requirements-dev.txt
 ```
 
 ### Step 3: Run Database Migrations
 ```powershell
-# Apply additive Version 1 and Version 2 migrations
+# Apply additive database migrations
 python -m alembic -c backend/alembic.ini upgrade head
 ```
 
@@ -114,8 +125,16 @@ cd ..
 ```
 
 ### Step 5: Start Development Server
+You can launch the platform in one of two ways:
+
+**Option A — Windows One-Click Launcher:**
 ```powershell
-# Run backend server (serving both API and compiled SPA)
+.\start_local.bat
+```
+The script validates your Python environment, applies migrations, verifies frontend assets, and launches the server.
+
+**Option B — Direct Command:**
+```powershell
 python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload
 ```
 - Web Application: [http://127.0.0.1:8000](http://127.0.0.1:8000)
@@ -128,11 +147,20 @@ python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --
 ## 4. Automated Verification & Testing
 
 ### Running Backend Pytest Suite
-All 36 test cases verify unit formulas, SSRF defenses, DAG cycle checks, AI schema validation, and multi-user isolation:
+Execute the full backend test suite covering unit formulas, Argon2id security, CSRF protection, SSRF url validation, DAG cycle detection, multi-user isolation, static file traversal protection, concurrency versioning, and rate limiting:
 ```powershell
 # Run from repository root
 .\.venv\Scripts\python.exe -m pytest backend/tests -v
 ```
+> **Verified Status (October 12, 2026)**: **71 passed, 1 skipped** (72 total tests). The single skipped test exercises Unix symlink traversal on non-elevated Windows environments.
+
+### Running Frontend Tests
+Execute the frontend test suite verifying intake draft persistence and user isolation, debounced search, pagination, workspace concurrency and partial failure isolation, accessible modals, and SEO metadata:
+```powershell
+cd frontend
+npm test
+```
+> **Verified Status (October 12, 2026)**: **40 passed** (40 total tests).
 
 ### Running Frontend Production Build & Typecheck
 ```powershell
@@ -140,9 +168,10 @@ cd frontend
 npm run build
 # Executes: tsc -b && vite build
 ```
+> **Verified Status (October 12, 2026)**: TypeScript strict compilation (`tsc -b`) and Vite production bundle passed with 0 errors.
 
 ### Running AI Quality & Schema Evaluation Suite
-Tests 5 diverse startup archetypes (EdTech, CleanTech, Creator Economy, Telehealth, B2B SaaS) across all structured AI pipelines:
+Tests 5 startup archetypes (EdTech, CleanTech, Creator Economy, Telehealth, B2B SaaS) across all structured AI pipelines:
 ```powershell
 # Run evaluation suite using deterministic mock generator:
 .\.venv\Scripts\python.exe backend/evaluations/run_evaluations.py --mock
@@ -159,27 +188,45 @@ Output results are recorded in `backend/evaluations/evaluation_report.json`.
 ### Production Dockerfile
 The repository contains a hardened, multi-stage `Dockerfile`:
 1. **Builder Stage**: `node:22-alpine` installs dependencies and runs `npm run build`.
-2. **Runtime Stage**: `python:3.12-slim` installs minimal OS libraries and Python packages, copies compiled SPA static assets to `/app/static`, applies Alembic migrations automatically on boot, and runs Uvicorn on dynamic `$PORT`.
+2. **Runtime Stage**: `python:3.12-slim` installs minimal OS libraries and Python packages, copies compiled SPA static assets to `/app/static`, and runs as a dedicated non-root user (`appuser:appgroup`, UID 10001) with least-privilege file permissions (755).
+3. **Container Entrypoint**: Web startup is decoupled from database migrations (`CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]`).
 
 ### Deployment to Render
 The application is pre-configured via `render.yaml` for a unified Render deployment:
-- **1 Render Docker Web Service**: Builds from root `Dockerfile`.
+- **1 Render Docker Web Service**: Builds from root `Dockerfile` on the `Starter` plan.
+- **Readiness Probing**: Health check path `/ready` verifies both web service and PostgreSQL database readiness with a bounded 3-second query timeout.
+- **Serialized Migrations**: Uses Render's documented `preDeployCommand: alembic upgrade head` to execute migrations once in an isolated ephemeral container before routing traffic to new container instances.
 - **1 Render PostgreSQL Database**: Managed PostgreSQL database.
 - **Environment Variables**:
   - `APP_ENV=production`
   - `SECRET_KEY` (Auto-generated by Render)
   - `DATABASE_URL` (Bound from `ai-business-architect-db.connectionString`)
   - `GEMINI_API_KEY` (Set securely in Render Dashboard)
-  - `GEMINI_MODEL=gemini-2.5-flash`
+  - `GEMINI_MODEL=gemini-3.5-flash-lite`
   - `SESSION_HTTPS_ONLY=true`
   - `SESSION_SAME_SITE=lax`
 
-**Zero-Downtime Migration Execution**:
-The Docker container entrypoint executes:
-```sh
-alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
-```
-This guarantees additive migrations are applied before the web service begins listening on `$PORT`.
+### Rolling Deploys & Expand/Contract Migrations
+During a Render rolling deployment, incoming requests are handled concurrently by both existing (old code) and newly provisioning (new code) container replicas. To prevent deployment failures and service interruptions, database schema modifications must follow the **Expand/Contract** pattern:
+1. **Expand**: Add columns as nullable or with defaults, and add non-blocking indexes. Never drop or rename active columns in an initial deploy.
+2. **Deploy Code**: Deploy the new application version. Both old and new application instances function correctly against the expanded database.
+3. **Contract**: Once the rollout is complete and all old container replicas are terminated, execute a subsequent migration to prune deprecated columns or enforce stricter constraints.
+
+> **Downtime Note**: Unconditional "zero downtime" is not guaranteed automatically. Smooth rolling deploys require backward-compatible expand/contract schema evolution, bounded query timeouts, and proper connection pool recycling.
+
+### CI Pipeline & Branch Protection
+A GitHub Actions CI workflow is configured in `.github/workflows/ci.yml` verifying backend pytest suites, frontend linting/testing/building, and production Docker builds.
+
+To enforce that code cannot be merged without passing CI checks:
+1. Navigate to repository **Settings** → **Branches** → **Add branch protection rule**.
+2. Set pattern to `main`.
+3. Check **Require a pull request before merging**.
+4. Check **Require status checks to pass before merging** and select:
+   - `Backend Tests (Pytest)`
+   - `Frontend Lint, Test & Build`
+   - `Docker Production Image Build`
+5. Check **Require branches to be up to date before merging**.
+6. Check **Do not allow bypassing the above settings**.
 
 ---
 
@@ -192,7 +239,6 @@ This guarantees additive migrations are applied before the web service begins li
 
 ---
 
-## 7. License & Disclaimers
+## 7. Disclaimers & Intended Use
 
-This project is licensed under the MIT License.
 AI Business Architect outputs are intended for entrepreneurial planning and conceptual software architecture. They do not replace certified legal, accounting, investment, or engineering advice.

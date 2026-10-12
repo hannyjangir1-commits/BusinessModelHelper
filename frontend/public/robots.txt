@@ -1,0 +1,20 @@
+# AI Business Architect - Robots Exclusion Policy
+# Allows search engine crawling of public informational pages only.
+# Excludes private venture data, authenticated workspaces, and backend API endpoints.
+
+User-agent: *
+Allow: /$
+Allow: /terms$
+Allow: /privacy$
+Allow: /acceptable-use$
+Allow: /contact$
+
+# Private user data and authenticated areas
+Disallow: /dashboard
+Disallow: /profile
+Disallow: /projects/
+Disallow: /login
+Disallow: /register
+Disallow: /api/
+
+Sitemap: /sitemap.xml

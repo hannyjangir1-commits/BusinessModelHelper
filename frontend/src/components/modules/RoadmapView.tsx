@@ -1,10 +1,6 @@
 import React, { useState } from 'react';
 import {
   Calendar,
-  CheckCircle2,
-  Clock,
-  Flag,
-  ListTodo,
   Milestone,
   Plus,
   RefreshCw,
@@ -12,9 +8,9 @@ import {
   Trash2,
 } from 'lucide-react';
 import { api } from '../../services/api';
-import { RoadmapResponse, RoadmapTask } from '../../types';
+import { RoadmapResponse } from '../../types';
 import { Button } from '../ui/Button';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
+import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
@@ -151,19 +147,6 @@ export const RoadmapView: React.FC<RoadmapViewProps> = ({
         return 'amber';
       case 'medium':
         return 'indigo';
-      default:
-        return 'slate';
-    }
-  };
-
-  const getStatusBadgeVariant = (s: string) => {
-    switch (s.toLowerCase()) {
-      case 'completed':
-        return 'emerald';
-      case 'in_progress':
-        return 'sky';
-      case 'blocked':
-        return 'rose';
       default:
         return 'slate';
     }

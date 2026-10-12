@@ -1,8 +1,30 @@
 .git
 .gitignore
 .dockerignore
+.github
+
+# Environment files and credentials (CRITICAL SECRETS)
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+id_rsa*
+id_ed25519*
+secrets/
+.secrets*
+
+# Virtual environments
 .venv
 venv
+ENV/
+env/
+
+# Python cache & artifacts
 __pycache__
 *.pyc
 *.pyo
@@ -12,10 +34,13 @@ __pycache__
 .pytest_cache
 .coverage
 htmlcov
+
+# Node & Frontend
 frontend/node_modules
 frontend/dist
-.env
-.env.*
+frontend/.vite
+
+# Logs, docs, and metadata
 *.log
 docs
 .gemini

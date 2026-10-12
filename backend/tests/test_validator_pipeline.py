@@ -195,3 +195,49 @@ def test_ai_failure_preserves_existing_validation_report(db):
     )
     assert failed_run is not None
     assert failed_run.error_code == "AI_TIMEOUT"
+
+
+def test_project_summary_reports_existing_validator_report(client):
+    """Regression test: verify project summary reports has_validator_report=True when validation report exists."""
+    client.post(
+        "/api/auth/register",
+        json={
+            "username": "summary_val_user",
+            "email": "val_summary@example.com",
+            "password": "Password123!",
+            "confirm_password": "Password123!",
+            "display_name": "Val Summary User",
+            "terms_accepted": True,
+            "privacy_acknowledged": True,
+        },
+    )
+
+    proj_res = client.post(
+        "/api/projects",
+        json={
+            "name": "Val Summary Project",
+            "idea_description": "Validate summary reporting.",
+            "industry": "Analytics",
+            "business_stage": "idea",
+        },
+    )
+    proj_id = proj_res.json()["data"]["id"]
+
+    # Before generation, has_validator_report should be False
+    before_res = client.get(f"/api/projects/{proj_id}")
+    assert before_res.status_code == 200
+    assert before_res.json()["data"]["has_validator_report"] is False
+
+    from app.services.ai import validator_pipeline
+    orig_client = validator_pipeline.GeminiAIClient
+    validator_pipeline.GeminiAIClient = MockAIClient
+    try:
+        gen_res = client.post(f"/api/projects/{proj_id}/validator/generate")
+        assert gen_res.status_code == 201
+
+        # After generation, has_validator_report must be True
+        after_res = client.get(f"/api/projects/{proj_id}")
+        assert after_res.status_code == 200
+        assert after_res.json()["data"]["has_validator_report"] is True
+    finally:
+        validator_pipeline.GeminiAIClient = orig_client

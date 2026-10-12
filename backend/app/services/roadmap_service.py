@@ -23,27 +23,49 @@ from app.schemas.roadmap import (
 )
 from app.services.ai.client import GeminiAIClient
 from app.services.ai.prompts import PROMPT_VERSION
-from app.services.project_service import get_user_project_by_id
+from app.services.project_service import get_user_project_by_id, save_blueprint_version
 
 logger = logging.getLogger(__name__)
 
 
-def validate_dag_dependencies(tasks: List[Dict[str, Any]]) -> None:
-    """Ensure task dependencies do not contain circular references (DAG cycle check via DFS)."""
-    graph: Dict[str, List[str]] = {}
+def validate_dag_dependencies(tasks: List[Dict[str, Any]], strict: bool = False) -> None:
+    """Ensure task dependencies do not contain circular references or invalid configurations.
+
+    When strict=True (used for manual task create/update):
+    - Rejects missing/empty task keys.
+    - Rejects duplicate task keys.
+    - Rejects self-dependencies.
+    - Rejects dependency keys that do not exist in the task set.
+    - Rejects cycles (circular dependencies).
+    """
     all_keys: Set[str] = set()
 
     for t in tasks:
-        key = t.get("task_key", "")
-        all_keys.add(key)
-        graph[key] = t.get("dependencies", [])
+        key = t.get("task_key")
+        if not key or not str(key).strip():
+            raise ValidationError("Roadmap task is missing a valid task key.")
+        key_str = str(key).strip()
+        if strict and key_str in all_keys:
+            raise ValidationError(f"Duplicate task key '{key_str}' detected in roadmap.")
+        all_keys.add(key_str)
 
-    # Verify all referenced dependency keys exist in the task set
-    for key, deps in graph.items():
+    graph: Dict[str, List[str]] = {}
+    for t in tasks:
+        key_str = str(t.get("task_key", "")).strip()
+        deps = t.get("dependencies") or []
+        graph[key_str] = []
+        seen_deps: Set[str] = set()
         for dep in deps:
-            if dep not in all_keys and dep != key:
-                # Remove stale or invalid dependency references silently to preserve stability
-                graph[key] = [d for d in deps if d in all_keys and d != key]
+            if not dep:
+                continue
+            dep_str = str(dep).strip()
+            if dep_str == key_str:
+                raise ValidationError(f"Circular dependency: task '{key_str}' cannot depend on itself.")
+            if strict and dep_str not in all_keys:
+                raise ValidationError(f"Task '{key_str}' references non-existent dependency key '{dep_str}'.")
+            if dep_str in all_keys and dep_str not in seen_deps:
+                seen_deps.add(dep_str)
+                graph[key_str].append(dep_str)
 
     # Cycle detection using 3-color DFS
     # 0 = unvisited, 1 = visiting (in current recursion stack), 2 = visited
@@ -184,9 +206,24 @@ def validate_roadmap_response(raw_text: str) -> GeneratedRoadmapData:
     except Exception as e:
         raise ValidationError(f"Roadmap failed schema validation: {str(e)}")
 
-    # Check for DAG cycles
+    # Clean up generator dependencies directly on the validated task models
+    all_gen_keys = {t.task_key.strip() for t in validated.tasks if t.task_key and str(t.task_key).strip()}
+    for task_item in validated.tasks:
+        cleaned_deps: List[str] = []
+        seen_deps: Set[str] = set()
+        for dep in task_item.dependencies:
+            if not dep:
+                continue
+            dep_str = str(dep).strip()
+            # Drop self-dependencies, invalid non-existent task keys, and duplicate references
+            if dep_str in all_gen_keys and dep_str != task_item.task_key.strip() and dep_str not in seen_deps:
+                seen_deps.add(dep_str)
+                cleaned_deps.append(dep_str)
+        task_item.dependencies = cleaned_deps
+
+    # Verify no cycles exist in the cleaned graph
     tasks_dicts = [t.model_dump() for t in validated.tasks]
-    validate_dag_dependencies(tasks_dicts)
+    validate_dag_dependencies(tasks_dicts, strict=False)
 
     return validated
 
@@ -223,22 +260,13 @@ def generate_execution_roadmap(
 
         validated_data = validate_roadmap_response(raw_text)
 
-        # 2. Increment version and save blueprint snapshot
-        latest_version = db.execute(
-            select(func.coalesce(func.max(Blueprint.version), 0)).where(
-                Blueprint.project_id == project.id,
-                Blueprint.module_type == "execution_roadmap",
-            )
-        ).scalar_one()
-        new_version = latest_version + 1
-
-        blueprint = Blueprint(
+        # 2. Increment version and save blueprint snapshot safely under concurrency
+        blueprint = save_blueprint_version(
+            db=db,
             project_id=project.id,
             module_type="execution_roadmap",
-            version=new_version,
             content_json=validated_data.model_dump(),
         )
-        db.add(blueprint)
 
         # 3. Replace current roadmap_tasks with new generated tasks
         db.query(RoadmapTask).filter(RoadmapTask.project_id == project.id).delete()
@@ -401,13 +429,38 @@ def create_roadmap_task(
     project_id: str,
     req: RoadmapTaskCreateRequest,
 ) -> RoadmapTaskResponse:
-    """Manually add a task to the project's execution roadmap."""
+    """Manually add a task to the project's execution roadmap after validating the complete DAG."""
     project = get_user_project_by_id(db, user, project_id)
 
-    task_key = req.task_key
-    if not task_key:
-        count = db.query(RoadmapTask).filter(RoadmapTask.project_id == project.id).count()
-        task_key = f"TSK-{count + 1:02d}"
+    existing_tasks = (
+        db.query(RoadmapTask)
+        .filter(RoadmapTask.project_id == project.id)
+        .order_by(asc(RoadmapTask.order_index))
+        .all()
+    )
+    existing_keys = {t.task_key for t in existing_tasks}
+
+    if req.task_key is not None and str(req.task_key).strip():
+        task_key = str(req.task_key).strip()
+        if task_key in existing_keys:
+            raise ValidationError(f"Duplicate task key '{task_key}' in roadmap.")
+    elif req.task_key is not None and not str(req.task_key).strip():
+        raise ValidationError("Task key cannot be empty.")
+    else:
+        count = len(existing_tasks) + 1
+        while f"TSK-{count:02d}" in existing_keys:
+            count += 1
+        task_key = f"TSK-{count:02d}"
+
+    candidate_graph = [
+        {"task_key": t.task_key, "dependencies": t.dependencies_json or []}
+        for t in existing_tasks
+    ]
+    candidate_graph.append(
+        {"task_key": task_key, "dependencies": req.dependencies or []}
+    )
+
+    validate_dag_dependencies(candidate_graph, strict=True)
 
     task = RoadmapTask(
         project_id=project.id,
@@ -422,7 +475,7 @@ def create_roadmap_task(
         estimated_effort_days=req.estimated_effort_days,
         start_day=req.start_day,
         duration_days=req.duration_days,
-        dependencies_json=req.dependencies,
+        dependencies_json=req.dependencies or [],
         deliverable=req.deliverable,
         success_criteria=req.success_criteria,
         related_risk=req.related_risk,
@@ -465,16 +518,27 @@ def update_roadmap_task(
     task_id: str,
     req: RoadmapTaskUpdateRequest,
 ) -> RoadmapTaskResponse:
-    """Update task status, priority, or details."""
+    """Update task status, priority, or details after validating the complete DAG."""
     get_user_project_by_id(db, user, project_id)
 
-    task = (
+    existing_tasks = (
         db.query(RoadmapTask)
-        .filter(RoadmapTask.id == task_id, RoadmapTask.project_id == project_id)
-        .first()
+        .filter(RoadmapTask.project_id == project_id)
+        .order_by(asc(RoadmapTask.order_index))
+        .all()
     )
+    task = next((t for t in existing_tasks if t.id == task_id), None)
     if not task:
         raise NotFoundError("Roadmap task not found.")
+
+    if req.dependencies is not None:
+        candidate_graph = []
+        for t in existing_tasks:
+            deps = req.dependencies if t.id == task_id else (t.dependencies_json or [])
+            candidate_graph.append({"task_key": t.task_key, "dependencies": deps})
+
+        validate_dag_dependencies(candidate_graph, strict=True)
+        task.dependencies_json = req.dependencies
 
     if req.title is not None:
         task.title = req.title
@@ -494,8 +558,6 @@ def update_roadmap_task(
         task.start_day = req.start_day
     if req.duration_days is not None:
         task.duration_days = req.duration_days
-    if req.dependencies is not None:
-        task.dependencies_json = req.dependencies
     if req.deliverable is not None:
         task.deliverable = req.deliverable
     if req.success_criteria is not None:

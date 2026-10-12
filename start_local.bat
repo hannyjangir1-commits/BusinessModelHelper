@@ -11,24 +11,26 @@ REM 1. Always switch to project root directory
 cd /d "%~dp0"
 
 REM 2. Identify Python Executable
-set "PYTHON_CMD="
+set "PYTHON_EXE="
+set "PYTHON_ARGS="
 
 if exist "%~dp0.venv\Scripts\python.exe" (
-    set "PYTHON_CMD=%~dp0.venv\Scripts\python.exe"
+    set "PYTHON_EXE=%~dp0.venv\Scripts\python.exe"
     echo [INFO] Virtual environment detected: .venv
     goto python_found
 )
 
 where python >nul 2>nul
 if not errorlevel 1 (
-    set "PYTHON_CMD=python"
+    set "PYTHON_EXE=python"
     echo [INFO] Using system Python from PATH.
     goto python_found
 )
 
 where py >nul 2>nul
 if not errorlevel 1 (
-    set "PYTHON_CMD=py -3"
+    set "PYTHON_EXE=py"
+    set "PYTHON_ARGS=-3"
     echo [INFO] Using Windows Python Launcher py -3.
     goto python_found
 )
@@ -39,6 +41,12 @@ echo Make sure to check "Add Python to PATH" during installation.
 goto error_exit
 
 :python_found
+
+if defined PYTHON_ARGS (
+    set PYTHON_RUN="%PYTHON_EXE%" %PYTHON_ARGS%
+) else (
+    set PYTHON_RUN="%PYTHON_EXE%"
+)
 
 REM 3. Activate Virtual Environment if available
 if exist "%~dp0.venv\Scripts\activate.bat" (
@@ -65,7 +73,7 @@ echo [INFO] Environment configuration .env is present.
 
 REM 5. Apply Additive Database Migrations
 echo [INFO] Applying database migrations via Alembic...
-"%PYTHON_CMD%" -m alembic -c backend\alembic.ini upgrade head
+%PYTHON_RUN% -m alembic -c backend\alembic.ini upgrade head
 if errorlevel 1 (
     echo.
     echo [ERROR] Database migration failed.
@@ -111,7 +119,7 @@ REM 7. Launch default browser after server warmup (3 seconds)
 start /b "" cmd /c "ping -n 4 127.0.0.1 >nul & start "" http://localhost:8000"
 
 REM 8. Start FastAPI Server (Serves API + Built SPA from single origin)
-"%PYTHON_CMD%" -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload
+%PYTHON_RUN% -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload
 
 echo.
 echo [INFO] Server stopped.

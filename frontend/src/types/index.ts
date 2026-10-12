@@ -397,3 +397,58 @@ export interface CopilotRevisionItem {
   resolved_at?: string | null;
 }
 
+export interface LoginPayload {
+  username_or_email?: string;
+  username?: string;
+  email?: string;
+  password: string;
+}
+
+export interface RegisterPayload {
+  username: string;
+  email: string;
+  password: string;
+  confirm_password?: string;
+  display_name?: string;
+  terms_accepted: boolean;
+  privacy_accepted?: boolean;
+  privacy_acknowledged?: boolean;
+  agreements_version?: string;
+}
+
+export interface UpdateProfilePayload {
+  display_name?: string;
+  bio?: string | null;
+  country?: string | null;
+  preferred_currency?: string;
+}
+
+export interface ChangePasswordPayload {
+  current_password?: string;
+  old_password?: string;
+  new_password?: string;
+  confirm_new_password?: string;
+  password?: string;
+}
+
+export interface DeleteAccountPayload {
+  password: string;
+  confirmation_text: string;
+}
+
+export interface CreateProjectPayload {
+  name: string;
+  idea_description: string;
+  industry: string;
+  business_stage: string;
+  target_market?: string | null;
+  target_audience?: string | null;
+  budget_amount?: number | null;
+  budget_currency?: string;
+  team_size?: string | null;
+  technical_preferences?: string | null;
+  constraints?: string | null;
+}
+
+export type UpdateProjectPayload = Partial<CreateProjectPayload>;
+

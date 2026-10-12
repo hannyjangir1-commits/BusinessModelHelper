@@ -247,3 +247,77 @@ def test_direct_service_calculation():
     assert model_data.break_even is not None
 
 
+def test_cogs_excludes_payment_fees():
+    """Verify that cogs strictly excludes payment fees when payment processing is represented separately."""
+    assumptions = FinancialAssumptions(
+        selling_price=100.0,
+        variable_cost_per_unit=25.0,
+        expected_sales_volume=10,
+        payment_processing_pct=3.0,
+        forecast_months=3,
+    )
+    monthly, _ = calculate_monthly_projections(assumptions)
+    m1 = monthly[0]
+    # Direct variable cost = 10 * 25 = 250.0
+    # Payment fee = 1000 * 0.03 = 30.0
+    # Total variable cost = 280.0
+    assert m1.direct_variable_costs == 250.0
+    assert m1.payment_fees == 30.0
+    assert m1.total_variable_costs == 280.0
+    assert m1.cogs == 250.0
+    assert m1.cogs != m1.total_variable_costs
+
+
+def test_runway_accounts_for_cash_over_time_without_one_time_startup_burn_distortion():
+    """Verify runway accounts for projected cash over time and does not treat one-time startup expenses as recurring burn."""
+    # Scenario A: Profitable business after Month 1 startup cost
+    # Starting cash = 30000. Month 1 startup cost = 10000.
+    # Revenue = 10000/mo, operating fixed = 2000, direct var = 1000. Monthly net profit ~ 5600.
+    # Month 1 net cash flow is negative due to $10,000 startup cost, but Month 2-12 are strongly positive.
+    profitable_assumptions = FinancialAssumptions(
+        starting_cash=30000.0,
+        one_time_startup_costs=10000.0,
+        monthly_fixed_expenses=2000.0,
+        marketing_expenditure=500.0,
+        salaries_costs=2000.0,
+        selling_price=100.0,
+        variable_cost_per_unit=10.0,
+        expected_sales_volume=100,  # $10,000 monthly revenue
+        monthly_growth_rate_pct=0.0,
+        forecast_months=12,
+    )
+    monthly, summary = calculate_monthly_projections(profitable_assumptions)
+    # Cash at end of month 1 = 30000 - 5700 (startup - profit) > 20000
+    # Cash never depletes; final month is cash flow positive
+    assert monthly[0].net_cash_flow < 0  # month 1 was negative because of one-time startup
+    assert monthly[1].net_cash_flow > 0  # month 2 is positive
+    assert summary.ending_cash_balance > profitable_assumptions.starting_cash
+    # Runway must NOT be finite (was ~4 months under buggy formula)
+    assert summary.estimated_runway_months is None
+
+    # Scenario B: Consistent monthly burn depleting cash over time
+    # Starting cash = 10000. Month 1 startup = 2000.
+    # Revenue = 0. Fixed expenses = 1000/month.
+    # Month 1 cash outflow = 3000 (2000 startup + 1000 fixed). Closing cash = 7000.
+    # Month 2-8 burn = 1000/month. Month 8 closing cash = 0.
+    burning_assumptions = FinancialAssumptions(
+        starting_cash=10000.0,
+        one_time_startup_costs=2000.0,
+        monthly_fixed_expenses=1000.0,
+        salaries_costs=0.0,
+        marketing_expenditure=0.0,
+        selling_price=100.0,
+        variable_cost_per_unit=10.0,
+        expected_sales_volume=0,  # 0 revenue -> pure burn
+        monthly_growth_rate_pct=0.0,
+        forecast_months=12,
+    )
+    monthly_burn, summary_burn = calculate_monthly_projections(burning_assumptions)
+    # Month 1 closing cash: 7000
+    # Month 8 closing cash: 0
+    # Under old buggy formula: 10000 / 3000 = 3.3 months!
+    # Under correct over-time tracking: exactly 8.0 months
+    assert summary_burn.estimated_runway_months == 8.0
+
+
+

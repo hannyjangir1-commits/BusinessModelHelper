@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   ArrowLeft,
   Bot,
   CheckCircle2,
@@ -15,7 +16,7 @@ import {
   ShieldAlert,
   Sparkles,
 } from 'lucide-react';
-import { api } from '../services/api';
+import { api, isAbortError, isNotFoundError } from '../services/api';
 import {
   Blueprint,
   BlueprintVersionItem,
@@ -65,6 +66,49 @@ const normalizeTab = (tab?: string): TabType => {
   return 'bmc';
 };
 
+export const ModuleLoadingCard: React.FC<{ message: string }> = ({ message }) => (
+  <div
+    role="status"
+    aria-live="polite"
+    className="bg-white border border-slate-200 rounded-2xl p-12 text-center max-w-lg mx-auto space-y-4 my-8 animate-pulse shadow-xs"
+  >
+    <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+      <RefreshCw className="w-6 h-6 animate-spin text-indigo-600" />
+    </div>
+    <p className="text-xs font-semibold text-slate-600">{message}</p>
+  </div>
+);
+
+export const ModuleErrorCard: React.FC<{
+  title: string;
+  message: string;
+  onRetry: () => void;
+  moduleName?: string;
+}> = ({ title, message, onRetry, moduleName = 'module' }) => (
+  <div
+    role="alert"
+    aria-live="polite"
+    className="bg-rose-50/70 border border-rose-200 rounded-2xl p-10 text-center max-w-lg mx-auto space-y-4 my-8"
+  >
+    <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+      <AlertTriangle className="w-6 h-6 text-rose-600" aria-hidden="true" />
+    </div>
+    <div className="space-y-1">
+      <h3 className="text-base font-bold text-slate-900">{title}</h3>
+      <p className="text-xs text-rose-700">{message}</p>
+    </div>
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={onRetry}
+      leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+      aria-label={`Retry loading ${moduleName}`}
+    >
+      Retry
+    </Button>
+  </div>
+);
+
 interface ProjectDetailPageProps {
   projectId: string;
   initialTab?: string;
@@ -94,6 +138,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
   // Business Model Canvas State
   const [bmcBlueprint, setBmcBlueprint] = useState<Blueprint | null>(null);
   const [bmcVersions, setBmcVersions] = useState<BlueprintVersionItem[]>([]);
+  const [bmcLoading, setBmcLoading] = useState<boolean>(true);
+  const [bmcError, setBmcError] = useState<string | null>(null);
+  const [bmcVersionError, setBmcVersionError] = useState<string | null>(null);
   const [isGeneratingBmc, setIsGeneratingBmc] = useState<boolean>(false);
   const [editingBmcBlockKey, setEditingBmcBlockKey] = useState<string | null>(null);
   const [editingBmcData, setEditingBmcData] = useState<BusinessModelCanvasData | null>(null);
@@ -101,6 +148,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
   // Technology Stack State
   const [techBlueprint, setTechBlueprint] = useState<Blueprint | null>(null);
   const [techVersions, setTechVersions] = useState<BlueprintVersionItem[]>([]);
+  const [techLoading, setTechLoading] = useState<boolean>(true);
+  const [techError, setTechError] = useState<string | null>(null);
+  const [techVersionError, setTechVersionError] = useState<string | null>(null);
   const [isGeneratingTech, setIsGeneratingTech] = useState<boolean>(false);
   const [editingTechKey, setEditingTechKey] = useState<string | null>(null);
   const [editingTechData, setEditingTechData] = useState<TechnologyStackData | null>(null);
@@ -108,89 +158,380 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
   // Module 1: Idea Validator State
   const [validatorReport, setValidatorReport] = useState<ValidationReportResponse | null>(null);
   const [validatorVersions, setValidatorVersions] = useState<BlueprintVersionItem[]>([]);
+  const [validatorLoading, setValidatorLoading] = useState<boolean>(true);
+  const [validatorError, setValidatorError] = useState<string | null>(null);
+  const [validatorVersionError, setValidatorVersionError] = useState<string | null>(null);
 
   // Module 2: Market Research State
   const [marketResearch, setMarketResearch] = useState<MarketResearchResponse | null>(null);
   const [researchVersions, setResearchVersions] = useState<BlueprintVersionItem[]>([]);
+  const [researchLoading, setResearchLoading] = useState<boolean>(true);
+  const [researchError, setResearchError] = useState<string | null>(null);
+  const [researchVersionError, setResearchVersionError] = useState<string | null>(null);
 
   // Module 3: Execution Roadmap State
   const [roadmap, setRoadmap] = useState<RoadmapResponse | null>(null);
+  const [roadmapLoading, setRoadmapLoading] = useState<boolean>(true);
+  const [roadmapError, setRoadmapError] = useState<string | null>(null);
 
   // Generation History State
   const [historyRuns, setHistoryRuns] = useState<GenerationRun[]>([]);
+  const [historyLoading, setHistoryLoading] = useState<boolean>(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   // PDF Export State
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
 
-  const fetchProjectData = async () => {
+  // Request Guard & Cancellation
+  const currentRequestIdRef = useRef<number>(0);
+  const activeAbortControllerRef = useRef<AbortController | null>(null);
+
+  const isStale = (requestId: number) => {
+    return requestId !== currentRequestIdRef.current;
+  };
+
+  const loadProject = async (signal?: AbortSignal, reqId = currentRequestIdRef.current) => {
     try {
-      const p = await api.projects.get(projectId);
+      const p = await api.projects.get(projectId, { signal });
+      if (isStale(reqId)) return;
       setProject(p);
-
-      // Load BMC
-      try {
-        const bmc = await api.bmc.get(projectId);
-        setBmcBlueprint(bmc);
-        const versions = await api.bmc.listVersions(projectId);
-        setBmcVersions(versions);
-      } catch {
-        setBmcBlueprint(null);
-      }
-
-      // Load Tech Stack
-      try {
-        const tech = await api.techStack.get(projectId);
-        setTechBlueprint(tech);
-        const versions = await api.techStack.listVersions(projectId);
-        setTechVersions(versions);
-      } catch {
-        setTechBlueprint(null);
-      }
-
-      // Load Idea Validator
-      try {
-        const val = await api.validator.get(projectId);
-        setValidatorReport(val);
-        const vVers = await api.validator.listVersions(projectId);
-        setValidatorVersions(vVers);
-      } catch {
-        setValidatorReport(null);
-      }
-
-      // Load Market Research
-      try {
-        const res = await api.marketResearch.get(projectId);
-        setMarketResearch(res);
-        const rVers = await api.marketResearch.listVersions(projectId);
-        setResearchVersions(rVers);
-      } catch {
-        setMarketResearch(null);
-      }
-
-      // Load Roadmap
-      try {
-        const rd = await api.roadmap.get(projectId);
-        setRoadmap(rd);
-      } catch {
-        setRoadmap(null);
-      }
-
-      // Load Generation History
-      try {
-        const runs = await api.generations.listForProject(projectId);
-        setHistoryRuns(runs);
-      } catch {
-        setHistoryRuns([]);
-      }
+      setError(null);
     } catch (err: any) {
-      setError(err.message || 'Failed to load project details.');
+      if (isAbortError(err) || isStale(reqId)) return;
+      if (isNotFoundError(err)) {
+        setProject(null);
+      } else {
+        setError(err?.message || 'Failed to load project details.');
+      }
     } finally {
-      setLoading(false);
+      if (!isStale(reqId)) {
+        setLoading(false);
+      }
+    }
+  };
+
+  const loadBmc = async (signal?: AbortSignal, reqId = currentRequestIdRef.current) => {
+    setBmcLoading(true);
+    setBmcError(null);
+    setBmcVersionError(null);
+    try {
+      const [bpRes, verRes] = await Promise.allSettled([
+        api.bmc.get(projectId, undefined, { signal }),
+        api.bmc.listVersions(projectId, { signal }),
+      ]);
+      if (isStale(reqId)) return;
+
+      if (bpRes.status === 'fulfilled') {
+        setBmcBlueprint(bpRes.value);
+        setBmcError(null);
+      } else {
+        const err = bpRes.reason;
+        if (isAbortError(err)) return;
+        if (isNotFoundError(err)) {
+          setBmcBlueprint(null);
+          setBmcError(null);
+        } else {
+          setBmcBlueprint(null);
+          setBmcError(err?.message || 'Failed to load Business Model Canvas.');
+        }
+      }
+
+      if (verRes.status === 'fulfilled') {
+        setBmcVersions(verRes.value);
+        setBmcVersionError(null);
+      } else {
+        const err = verRes.reason;
+        if (!isAbortError(err)) {
+          setBmcVersionError(err?.message || 'Failed to load version history.');
+        }
+      }
+    } finally {
+      if (!isStale(reqId)) {
+        setBmcLoading(false);
+      }
+    }
+  };
+
+  const loadBmcVersions = async (signal?: AbortSignal, reqId = currentRequestIdRef.current) => {
+    try {
+      const vers = await api.bmc.listVersions(projectId, { signal });
+      if (isStale(reqId)) return;
+      setBmcVersions(vers);
+      setBmcVersionError(null);
+    } catch (err: any) {
+      if (!isAbortError(err) && !isStale(reqId)) {
+        setBmcVersionError(err?.message || 'Failed to load version history.');
+      }
+    }
+  };
+
+  const loadTech = async (signal?: AbortSignal, reqId = currentRequestIdRef.current) => {
+    setTechLoading(true);
+    setTechError(null);
+    setTechVersionError(null);
+    try {
+      const [bpRes, verRes] = await Promise.allSettled([
+        api.techStack.get(projectId, undefined, { signal }),
+        api.techStack.listVersions(projectId, { signal }),
+      ]);
+      if (isStale(reqId)) return;
+
+      if (bpRes.status === 'fulfilled') {
+        setTechBlueprint(bpRes.value);
+        setTechError(null);
+      } else {
+        const err = bpRes.reason;
+        if (isAbortError(err)) return;
+        if (isNotFoundError(err)) {
+          setTechBlueprint(null);
+          setTechError(null);
+        } else {
+          setTechBlueprint(null);
+          setTechError(err?.message || 'Failed to load Technology Stack.');
+        }
+      }
+
+      if (verRes.status === 'fulfilled') {
+        setTechVersions(verRes.value);
+        setTechVersionError(null);
+      } else {
+        const err = verRes.reason;
+        if (!isAbortError(err)) {
+          setTechVersionError(err?.message || 'Failed to load version history.');
+        }
+      }
+    } finally {
+      if (!isStale(reqId)) {
+        setTechLoading(false);
+      }
+    }
+  };
+
+  const loadTechVersions = async (signal?: AbortSignal, reqId = currentRequestIdRef.current) => {
+    try {
+      const vers = await api.techStack.listVersions(projectId, { signal });
+      if (isStale(reqId)) return;
+      setTechVersions(vers);
+      setTechVersionError(null);
+    } catch (err: any) {
+      if (!isAbortError(err) && !isStale(reqId)) {
+        setTechVersionError(err?.message || 'Failed to load version history.');
+      }
+    }
+  };
+
+  const loadValidator = async (signal?: AbortSignal, reqId = currentRequestIdRef.current) => {
+    setValidatorLoading(true);
+    setValidatorError(null);
+    setValidatorVersionError(null);
+    try {
+      const [valRes, verRes] = await Promise.allSettled([
+        api.validator.get(projectId, undefined, { signal }),
+        api.validator.listVersions(projectId, { signal }),
+      ]);
+      if (isStale(reqId)) return;
+
+      if (valRes.status === 'fulfilled') {
+        setValidatorReport(valRes.value);
+        setValidatorError(null);
+      } else {
+        const err = valRes.reason;
+        if (isAbortError(err)) return;
+        if (isNotFoundError(err)) {
+          setValidatorReport(null);
+          setValidatorError(null);
+        } else {
+          setValidatorReport(null);
+          setValidatorError(err?.message || 'Failed to load Idea Validator report.');
+        }
+      }
+
+      if (verRes.status === 'fulfilled') {
+        setValidatorVersions(verRes.value);
+        setValidatorVersionError(null);
+      } else {
+        const err = verRes.reason;
+        if (!isAbortError(err)) {
+          setValidatorVersionError(err?.message || 'Failed to load version history.');
+        }
+      }
+    } finally {
+      if (!isStale(reqId)) {
+        setValidatorLoading(false);
+      }
+    }
+  };
+
+  const loadValidatorVersions = async (signal?: AbortSignal, reqId = currentRequestIdRef.current) => {
+    try {
+      const vers = await api.validator.listVersions(projectId, { signal });
+      if (isStale(reqId)) return;
+      setValidatorVersions(vers);
+      setValidatorVersionError(null);
+    } catch (err: any) {
+      if (!isAbortError(err) && !isStale(reqId)) {
+        setValidatorVersionError(err?.message || 'Failed to load version history.');
+      }
+    }
+  };
+
+  const loadMarketResearch = async (signal?: AbortSignal, reqId = currentRequestIdRef.current) => {
+    setResearchLoading(true);
+    setResearchError(null);
+    setResearchVersionError(null);
+    try {
+      const [resRes, verRes] = await Promise.allSettled([
+        api.marketResearch.get(projectId, undefined, { signal }),
+        api.marketResearch.listVersions(projectId, { signal }),
+      ]);
+      if (isStale(reqId)) return;
+
+      if (resRes.status === 'fulfilled') {
+        setMarketResearch(resRes.value);
+        setResearchError(null);
+      } else {
+        const err = resRes.reason;
+        if (isAbortError(err)) return;
+        if (isNotFoundError(err)) {
+          setMarketResearch(null);
+          setResearchError(null);
+        } else {
+          setMarketResearch(null);
+          setResearchError(err?.message || 'Failed to load market research.');
+        }
+      }
+
+      if (verRes.status === 'fulfilled') {
+        setResearchVersions(verRes.value);
+        setResearchVersionError(null);
+      } else {
+        const err = verRes.reason;
+        if (!isAbortError(err)) {
+          setResearchVersionError(err?.message || 'Failed to load version history.');
+        }
+      }
+    } finally {
+      if (!isStale(reqId)) {
+        setResearchLoading(false);
+      }
+    }
+  };
+
+  const loadMarketResearchVersions = async (signal?: AbortSignal, reqId = currentRequestIdRef.current) => {
+    try {
+      const vers = await api.marketResearch.listVersions(projectId, { signal });
+      if (isStale(reqId)) return;
+      setResearchVersions(vers);
+      setResearchVersionError(null);
+    } catch (err: any) {
+      if (!isAbortError(err) && !isStale(reqId)) {
+        setResearchVersionError(err?.message || 'Failed to load version history.');
+      }
+    }
+  };
+
+  const loadRoadmap = async (signal?: AbortSignal, reqId = currentRequestIdRef.current) => {
+    setRoadmapLoading(true);
+    setRoadmapError(null);
+    try {
+      const rd = await api.roadmap.get(projectId, { signal });
+      if (isStale(reqId)) return;
+      setRoadmap(rd);
+      setRoadmapError(null);
+    } catch (err: any) {
+      if (isAbortError(err) || isStale(reqId)) return;
+      if (isNotFoundError(err)) {
+        setRoadmap(null);
+        setRoadmapError(null);
+      } else {
+        setRoadmap(null);
+        setRoadmapError(err?.message || 'Failed to load execution roadmap.');
+      }
+    } finally {
+      if (!isStale(reqId)) {
+        setRoadmapLoading(false);
+      }
+    }
+  };
+
+  const loadHistory = async (signal?: AbortSignal, reqId = currentRequestIdRef.current) => {
+    setHistoryLoading(true);
+    setHistoryError(null);
+    try {
+      const runs = await api.generations.listForProject(projectId, { signal });
+      if (isStale(reqId)) return;
+      setHistoryRuns(runs);
+      setHistoryError(null);
+    } catch (err: any) {
+      if (isAbortError(err) || isStale(reqId)) return;
+      setHistoryRuns([]);
+      setHistoryError(err?.message || 'Failed to load generation audit history.');
+    } finally {
+      if (!isStale(reqId)) {
+        setHistoryLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchProjectData();
+    // Requirement 4: Cancel inflight requests from the previously selected project
+    if (activeAbortControllerRef.current) {
+      activeAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    activeAbortControllerRef.current = controller;
+    const reqId = ++currentRequestIdRef.current;
+
+    // Immediately reset state so old project data does not persist into newly selected project
+    setProject(null);
+    setLoading(true);
+    setError(null);
+    setSuccessMsg(null);
+
+    setBmcBlueprint(null);
+    setBmcVersions([]);
+    setBmcLoading(true);
+    setBmcError(null);
+    setBmcVersionError(null);
+
+    setTechBlueprint(null);
+    setTechVersions([]);
+    setTechLoading(true);
+    setTechError(null);
+    setTechVersionError(null);
+
+    setValidatorReport(null);
+    setValidatorVersions([]);
+    setValidatorLoading(true);
+    setValidatorError(null);
+    setValidatorVersionError(null);
+
+    setMarketResearch(null);
+    setResearchVersions([]);
+    setResearchLoading(true);
+    setResearchError(null);
+    setResearchVersionError(null);
+
+    setRoadmap(null);
+    setRoadmapLoading(true);
+    setRoadmapError(null);
+
+    setHistoryRuns([]);
+    setHistoryLoading(true);
+    setHistoryError(null);
+
+    // Requirement 1: Concurrently load all independent modules
+    loadProject(controller.signal, reqId);
+    loadBmc(controller.signal, reqId);
+    loadTech(controller.signal, reqId);
+    loadValidator(controller.signal, reqId);
+    loadMarketResearch(controller.signal, reqId);
+    loadRoadmap(controller.signal, reqId);
+    loadHistory(controller.signal, reqId);
+
+    return () => {
+      controller.abort();
+    };
   }, [projectId]);
 
   // Generate BMC
@@ -201,12 +542,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
     try {
       const blueprint = await api.bmc.generate(projectId);
       setBmcBlueprint(blueprint);
-      const versions = await api.bmc.listVersions(projectId);
-      setBmcVersions(versions);
+      loadBmcVersions();
       setSuccessMsg('Business Model Canvas generated successfully!');
-      // refresh history
-      const runs = await api.generations.listForProject(projectId);
-      setHistoryRuns(runs);
+      loadHistory();
     } catch (err: any) {
       setError(err.message || 'Failed to generate Business Model Canvas.');
     } finally {
@@ -232,12 +570,9 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
     try {
       const blueprint = await api.techStack.generate(projectId);
       setTechBlueprint(blueprint);
-      const versions = await api.techStack.listVersions(projectId);
-      setTechVersions(versions);
+      loadTechVersions();
       setSuccessMsg('Technology Stack recommendation generated successfully!');
-      // refresh history
-      const runs = await api.generations.listForProject(projectId);
-      setHistoryRuns(runs);
+      loadHistory();
     } catch (err: any) {
       setError(err.message || 'Failed to generate Technology Stack.');
     } finally {
@@ -310,11 +645,22 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
   if (!project) {
     return (
       <div className="max-w-2xl mx-auto py-20 text-center space-y-4">
-        <h2 className="text-xl font-bold text-slate-800">Project Not Found</h2>
-        <p className="text-sm text-slate-500">The requested business project could not be found or you lack permission.</p>
-        <Button variant="primary" onClick={() => onNavigate('/dashboard')}>
-          Back to Dashboard
-        </Button>
+        <h2 className="text-xl font-bold text-slate-800">
+          {error ? 'Failed to Load Project' : 'Project Not Found'}
+        </h2>
+        <p className="text-sm text-slate-500">
+          {error || 'The requested business project could not be found or you lack permission.'}
+        </p>
+        <div className="flex justify-center gap-3">
+          {error && (
+            <Button variant="outline" onClick={() => loadProject()}>
+              Retry
+            </Button>
+          )}
+          <Button variant="primary" onClick={() => onNavigate('/dashboard')}>
+            Back to Dashboard
+          </Button>
+        </div>
       </div>
     );
   }
@@ -489,7 +835,16 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
       {/* TAB 1: BUSINESS MODEL CANVAS */}
       {activeTab === 'bmc' && (
         <div className="space-y-6">
-          {!bmcBlueprint || !bmcData ? (
+          {bmcLoading ? (
+            <ModuleLoadingCard message="Loading Business Model Canvas..." />
+          ) : bmcError && !bmcBlueprint ? (
+            <ModuleErrorCard
+              title="Failed to Load Business Model Canvas"
+              message={bmcError}
+              onRetry={() => loadBmc()}
+              moduleName="Business Model Canvas"
+            />
+          ) : !bmcBlueprint || !bmcData ? (
             <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-12 text-center max-w-lg mx-auto space-y-4 my-8">
               <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
                 <Layers className="w-6 h-6" />
@@ -511,6 +866,27 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
             </div>
           ) : (
             <div className="space-y-6">
+              {/* Requirement 3: Separate Version History Error Banner without clearing report */}
+              {bmcVersionError && (
+                <div
+                  role="alert"
+                  className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 gap-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" aria-hidden="true" />
+                    <span>Unable to load version history: {bmcVersionError}</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadBmcVersions()}
+                    aria-label="Retry loading BMC versions"
+                  >
+                    Retry History
+                  </Button>
+                </div>
+              )}
+
               {/* Controls bar: Versions and Regenerate */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200">
                 <div className="flex items-center gap-3">
@@ -519,6 +895,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
                     value={bmcBlueprint.version}
                     onChange={(e) => handleSelectBmcVersion(parseInt(e.target.value))}
                     className="text-xs bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-800"
+                    aria-label="Select BMC version"
                   >
                     {bmcVersions.map((v) => (
                       <option key={v.version} value={v.version}>
@@ -658,7 +1035,16 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
       {/* TAB 2: TECHNOLOGY STACK */}
       {activeTab === 'tech' && (
         <div className="space-y-6">
-          {!techBlueprint || !techData ? (
+          {techLoading ? (
+            <ModuleLoadingCard message="Loading Technology Stack..." />
+          ) : techError && !techBlueprint ? (
+            <ModuleErrorCard
+              title="Failed to Load Technology Stack"
+              message={techError}
+              onRetry={() => loadTech()}
+              moduleName="Technology Stack"
+            />
+          ) : !techBlueprint || !techData ? (
             <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-12 text-center max-w-lg mx-auto space-y-4 my-8">
               <div className="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center mx-auto">
                 <Cpu className="w-6 h-6" />
@@ -680,6 +1066,27 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
             </div>
           ) : (
             <div className="space-y-6">
+              {/* Requirement 3: Separate Version History Error Banner without clearing report */}
+              {techVersionError && (
+                <div
+                  role="alert"
+                  className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 gap-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" aria-hidden="true" />
+                    <span>Unable to load version history: {techVersionError}</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadTechVersions()}
+                    aria-label="Retry loading tech stack versions"
+                  >
+                    Retry History
+                  </Button>
+                </div>
+              )}
+
               {/* Controls bar */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-slate-200">
                 <div className="flex items-center gap-3">
@@ -688,6 +1095,7 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
                     value={techBlueprint.version}
                     onChange={(e) => handleSelectTechVersion(parseInt(e.target.value))}
                     className="text-xs bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 font-medium text-slate-800"
+                    aria-label="Select Technology Stack version"
                   >
                     {techVersions.map((v) => (
                       <option key={v.version} value={v.version}>
@@ -862,7 +1270,16 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
             <CardTitle>AI Generation Run Audit Log</CardTitle>
           </CardHeader>
           <CardContent className="p-6">
-            {historyRuns.length === 0 ? (
+            {historyLoading ? (
+              <p className="text-xs text-slate-500 py-6 text-center">Loading generation history...</p>
+            ) : historyError ? (
+              <div role="alert" className="text-center py-6 space-y-2">
+                <p className="text-xs text-rose-600">{historyError}</p>
+                <Button variant="outline" size="sm" onClick={() => loadHistory()}>
+                  Retry History
+                </Button>
+              </div>
+            ) : historyRuns.length === 0 ? (
               <p className="text-xs text-slate-500 py-6 text-center">No generation runs recorded yet.</p>
             ) : (
               <div className="overflow-x-auto">
@@ -916,7 +1333,15 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
             projectId={projectId}
             report={validatorReport}
             versions={validatorVersions}
-            onReportUpdated={fetchProjectData}
+            isLoading={validatorLoading}
+            error={validatorError}
+            versionError={validatorVersionError}
+            onRetry={() => loadValidator()}
+            onRetryVersions={() => loadValidatorVersions()}
+            onReportUpdated={() => {
+              loadValidatorVersions();
+              loadHistory();
+            }}
           />
         </ErrorBoundary>
       )}
@@ -924,24 +1349,70 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
       {/* TAB: MARKET RESEARCH */}
       {activeTab === 'research' && (
         <ErrorBoundary fallbackTitle="Market Research Module Error" fallbackMessage="An error occurred while displaying the Market Research & Competitor Analysis module.">
-          <MarketResearchView
-            projectId={projectId}
-            research={marketResearch}
-            versions={researchVersions}
-            isLoading={loading}
-            onResearchUpdated={fetchProjectData}
-          />
+          {researchError && !marketResearch ? (
+            <ModuleErrorCard
+              title="Failed to Load Market Research"
+              message={researchError}
+              onRetry={() => loadMarketResearch()}
+              moduleName="Market Research"
+            />
+          ) : (
+            <div className="space-y-6">
+              {researchVersionError && (
+                <div
+                  role="alert"
+                  className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 gap-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" aria-hidden="true" />
+                    <span>Unable to load version history: {researchVersionError}</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadMarketResearchVersions()}
+                    aria-label="Retry loading market research versions"
+                  >
+                    Retry History
+                  </Button>
+                </div>
+              )}
+              <MarketResearchView
+                projectId={projectId}
+                research={marketResearch}
+                versions={researchVersions}
+                isLoading={researchLoading}
+                onResearchUpdated={() => {
+                  loadMarketResearchVersions();
+                  loadHistory();
+                }}
+              />
+            </div>
+          )}
         </ErrorBoundary>
       )}
 
       {/* TAB: EXECUTION ROADMAP */}
       {activeTab === 'roadmap' && (
         <ErrorBoundary fallbackTitle="Execution Roadmap Module Error" fallbackMessage="An error occurred while displaying the Execution Roadmap module.">
-          <RoadmapView
-            projectId={projectId}
-            roadmap={roadmap}
-            onRoadmapUpdated={fetchProjectData}
-          />
+          {roadmapLoading ? (
+            <ModuleLoadingCard message="Loading Execution Roadmap..." />
+          ) : roadmapError && !roadmap ? (
+            <ModuleErrorCard
+              title="Failed to Load Execution Roadmap"
+              message={roadmapError}
+              onRetry={() => loadRoadmap()}
+              moduleName="Execution Roadmap"
+            />
+          ) : (
+            <RoadmapView
+              projectId={projectId}
+              roadmap={roadmap}
+              onRoadmapUpdated={() => {
+                loadRoadmap();
+              }}
+            />
+          )}
         </ErrorBoundary>
       )}
 
@@ -950,7 +1421,11 @@ export const ProjectDetailPage: React.FC<ProjectDetailPageProps> = ({ projectId,
         <ErrorBoundary fallbackTitle="Blueprint Copilot Module Error" fallbackMessage="An error occurred while displaying the Blueprint Copilot module.">
           <CopilotWorkspaceView
             projectId={projectId}
-            onBlueprintModified={fetchProjectData}
+            onBlueprintModified={() => {
+              loadBmc();
+              loadTech();
+              loadHistory();
+            }}
           />
         </ErrorBoundary>
       )}

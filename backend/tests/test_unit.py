@@ -182,3 +182,152 @@ def test_comprehensive_v2_pdf_generation():
     assert isinstance(pdf_bytes, bytes)
     assert len(pdf_bytes) > 5000  # Multi-page comprehensive report
     assert pdf_bytes.startswith(b"%PDF")
+
+
+def test_pdf_generation_escapes_xml_special_characters():
+    """Verify that user/project/blueprint text containing &, <, >, and existing entities does not break PDF generation."""
+    from app.models.blueprint import Blueprint
+    from app.models.roadmap_task import RoadmapTask
+
+    project = Project(
+        name="AT&T <NextGen> & 'Smart' AI > 9000",
+        idea_description="Revolutionary R&D platform: <script>alert(1)</script> & margin > 80% & cost < $10k with &amp; existing entity.",
+        industry="Hardware & IoT <Edge>",
+        business_stage="idea",
+        target_market="North America & Europe > $5B",
+        target_audience="Founders & CTOs <Tech>",
+        budget_amount=7500.0,
+        budget_currency="USD",
+        team_size="1 < 5",
+    )
+
+    bmc = Blueprint(
+        module_type="business_model",
+        version=1,
+        content_json={
+            "overview": "Overview with R&D & growth > 150% & cost < $2k",
+            "key_strategic_focus": "Disruption & Scaling <Fast>",
+            "customer_segments": {
+                "block_title": "B2B & B2C <Enterprise>",
+                "summary": "Enterprises with revenue > $10M & team < 50 &amp; partners",
+                "recommendations": ["Expand into UK & EU <tier-1>", "Maintain margins > 70%"],
+                "rationale": "High demand & low supply (<3 competitors)",
+                "assumptions": ["Growth > 20% year-over-year & zero churn"],
+                "validation_experiments": ["A/B test with cohort <Alpha> & <Beta>"],
+            },
+        },
+    )
+
+    tech = Blueprint(
+        module_type="technology_stack",
+        version=1,
+        content_json={
+            "architecture_summary": "Microservices with gRPC & REST <HTTP/2>",
+            "estimated_monthly_infrastructure_total": "$50 - $100 & cloud credits",
+            "backend": {
+                "technology": "Python & Rust <async>",
+                "purpose": "Core API & compute (<10ms latency)",
+                "reason": "Performance > pure Python & safety",
+                "estimated_cost": "< $20/mo",
+                "alternatives": ["Go & Node.js", "C++ <embedded>"],
+                "tradeoffs": ["Rust compile times > Python", "Memory safety <guaranteed>"],
+                "verification_notes": "Pricing verified on AWS & GCP",
+            },
+        },
+    )
+
+    validator = Blueprint(
+        module_type="validation_report",
+        version=1,
+        content_json={
+            "overview": "Validation synthesis: Confidence > 90% & risk < threshold",
+            "problem_solution_fit": {
+                "problem_statement": "Manual data entry takes > 4 hrs & causes errors",
+                "who_experiences_it": "Operations managers & staff <finance>",
+                "frequency_and_severity": "Daily & critical (> 8/10)",
+            },
+            "swot_analysis": {
+                "strengths": ["Speed > alternatives & cost < legacy tools"],
+                "weaknesses": ["Early stage & limited integrations (<5)"],
+                "opportunities": ["Market > $10B & growing"],
+                "threats": ["Competitor A & Competitor B <giants>"],
+            },
+            "business_risks": [
+                {
+                    "category": "Market & Tech",
+                    "description": "Adoption latency > 6 months & high switching friction",
+                    "likelihood": "High > 50%",
+                    "impact": "Severe <Critical>",
+                    "suggested_mitigation": "Offer freemium tier & 1-click migration",
+                    "recommended_next_action": "Pilot with 5 beta users & gather feedback",
+                }
+            ],
+            "validation_experiments": [
+                {
+                    "experiment_name": "Landing page test & survey <v1>",
+                    "hypothesis": "Conversion rate > 5% & CAC < $20",
+                    "procedure": "Run Google Ads with query 'automation & speed'",
+                    "success_criteria": "Signups > 100 & CTR > 3%",
+                    "estimated_duration": "< 2 weeks",
+                }
+            ],
+        },
+    )
+
+    research = Blueprint(
+        module_type="market_research",
+        version=1,
+        content_json={
+            "executive_summary": "Market research shows CAGR > 25% & unmet customer needs",
+            "market_trends": [
+                {
+                    "trend_title": "AI & Automation in SMBs",
+                    "description": "Adoption grew > 40% & costs decreased < 30%",
+                    "implications_for_founder": "First-mover advantage & high retention",
+                }
+            ],
+            "competitors": [
+                {
+                    "name": "LegacyCorp & Co <Old>",
+                    "website": "https://legacy.com?foo=1&bar=2",
+                    "estimated_pricing": "> $500/mo",
+                    "key_features": ["Feature A & B", "Feature C <v2>"],
+                    "differentiators": ["Ours is 10x faster & 5x cheaper <guaranteed>"],
+                }
+            ],
+        },
+    )
+
+    tasks = [
+        RoadmapTask(
+            task_key="TSK-01",
+            milestone="30-day",
+            title="Setup CI/CD & Deploy <Staging>",
+            priority="critical",
+            status="in_progress",
+            deliverable="Pipeline & Docker image (<50MB)",
+        ),
+        RoadmapTask(
+            task_key="TSK-02",
+            milestone="60-day",
+            title="User acquisition > 100 users",
+            priority="high",
+            status="pending",
+            deliverable="Active users & NPS > 50",
+        ),
+    ]
+
+    # Must generate valid PDF bytes without ReportLab XML parsing errors
+    pdf_bytes = generate_project_blueprint_pdf(
+        project,
+        bmc_blueprint=bmc,
+        tech_blueprint=tech,
+        validator_report=validator,
+        research_report=research,
+        roadmap_tasks=tasks,
+    )
+
+    assert isinstance(pdf_bytes, bytes)
+    assert len(pdf_bytes) > 5000
+    assert pdf_bytes.startswith(b"%PDF")
+

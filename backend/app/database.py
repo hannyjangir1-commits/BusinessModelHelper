@@ -37,6 +37,7 @@ def get_engine():
             max_overflow=20,
             pool_pre_ping=True,
             pool_recycle=300,
+            connect_args={"connect_timeout": 5},
             echo=False,
         )
 

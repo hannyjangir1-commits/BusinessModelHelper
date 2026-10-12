@@ -21,6 +21,20 @@ from reportlab.platypus import (
 from app.models.blueprint import Blueprint
 from app.models.project import Project
 
+import html
+
+
+def _escape_pdf(text: Any) -> str:
+    """Safely escape untrusted text for ReportLab Paragraphs.
+
+    Converts bare XML special characters (&, <, >) to entities while preventing
+    double-escaping of already-escaped entities (&amp;, &lt;, &gt;).
+    """
+    if text is None:
+        return ""
+    s = str(text)
+    return html.escape(html.unescape(s), quote=False)
+
 
 class NumberedCanvas:
     """Canvas that performs two passes to render accurate total page count on footer."""
@@ -163,7 +177,7 @@ def generate_project_blueprint_pdf(
     # Header / Brand
     elements.append(Paragraph("AI BUSINESS ARCHITECT", subtitle_style))
     elements.append(Spacer(1, 4))
-    elements.append(Paragraph(f"Executive Blueprint: {project.name}", title_style))
+    elements.append(Paragraph(f"Executive Blueprint: {_escape_pdf(project.name)}", title_style))
     elements.append(Spacer(1, 4))
     now_str = datetime.now(timezone.utc).strftime("%B %d, %Y at %H:%M UTC")
     elements.append(Paragraph(f"Generated on {now_str}", subtitle_style))
@@ -173,13 +187,13 @@ def generate_project_blueprint_pdf(
     # Project Overview Table
     elements.append(Paragraph("1. Executive Summary & Context", h1_style))
     meta_data = [
-        [Paragraph("Industry / Domain", meta_label), Paragraph(project.industry, meta_val),
-         Paragraph("Business Stage", meta_label), Paragraph(project.business_stage.capitalize(), meta_val)],
-        [Paragraph("Target Market", meta_label), Paragraph(project.target_market or "General", meta_val),
-         Paragraph("Target Audience", meta_label), Paragraph(project.target_audience or "Broad", meta_val)],
+        [Paragraph("Industry / Domain", meta_label), Paragraph(_escape_pdf(project.industry), meta_val),
+         Paragraph("Business Stage", meta_label), Paragraph(_escape_pdf(project.business_stage.capitalize()), meta_val)],
+        [Paragraph("Target Market", meta_label), Paragraph(_escape_pdf(project.target_market or "General"), meta_val),
+         Paragraph("Target Audience", meta_label), Paragraph(_escape_pdf(project.target_audience or "Broad"), meta_val)],
         [Paragraph("Estimated Budget", meta_label),
-         Paragraph(f"{project.budget_amount:,.2f} {project.budget_currency}" if project.budget_amount else "Bootstrapped", meta_val),
-         Paragraph("Team Size", meta_label), Paragraph(project.team_size or "Solo Founder", meta_val)],
+         Paragraph(f"{project.budget_amount:,.2f} {_escape_pdf(project.budget_currency)}" if project.budget_amount else "Bootstrapped", meta_val),
+         Paragraph("Team Size", meta_label), Paragraph(_escape_pdf(project.team_size or "Solo Founder"), meta_val)],
     ]
     t_meta = Table(meta_data, colWidths=[110, 140, 110, 144])
     t_meta.setStyle(TableStyle([
@@ -193,7 +207,7 @@ def generate_project_blueprint_pdf(
     elements.append(Spacer(1, 10))
 
     elements.append(Paragraph("Business Idea Description", h2_style))
-    elements.append(Paragraph(project.idea_description, body_style))
+    elements.append(Paragraph(_escape_pdf(project.idea_description), body_style))
     elements.append(Spacer(1, 14))
 
     # Business Model Canvas Section
@@ -203,10 +217,10 @@ def generate_project_blueprint_pdf(
         bmc_data = bmc_blueprint.content_json
 
         if "overview" in bmc_data:
-            elements.append(Paragraph(f"<b>Overview:</b> {bmc_data['overview']}", body_style))
+            elements.append(Paragraph(f"<b>Overview:</b> {_escape_pdf(bmc_data['overview'])}", body_style))
             elements.append(Spacer(1, 4))
         if "key_strategic_focus" in bmc_data:
-            elements.append(Paragraph(f"<b>Core Strategic Focus:</b> {bmc_data['key_strategic_focus']}", body_style))
+            elements.append(Paragraph(f"<b>Core Strategic Focus:</b> {_escape_pdf(bmc_data['key_strategic_focus'])}", body_style))
             elements.append(Spacer(1, 10))
 
         blocks_order = [
@@ -224,10 +238,10 @@ def generate_project_blueprint_pdf(
         for block_key, fallback_title in blocks_order:
             block = bmc_data.get(block_key, {})
             if isinstance(block, dict):
-                title = block.get("block_title", fallback_title)
-                summary = block.get("summary", "")
+                title = _escape_pdf(block.get("block_title", fallback_title))
+                summary = _escape_pdf(block.get("summary", ""))
                 recs = block.get("recommendations", [])
-                rationale = block.get("rationale", "")
+                rationale = _escape_pdf(block.get("rationale", ""))
                 assumptions = block.get("assumptions", [])
                 experiments = block.get("validation_experiments", [])
 
@@ -238,7 +252,7 @@ def generate_project_blueprint_pdf(
                 ]
 
                 if recs:
-                    rec_text = "<br/>".join([f"• {r}" for r in recs])
+                    rec_text = "<br/>".join([f"• {_escape_pdf(r)}" for r in recs])
                     block_elements.append(Paragraph(f"<b>Recommendations:</b><br/>{rec_text}", body_style))
                     block_elements.append(Spacer(1, 3))
 
@@ -247,12 +261,12 @@ def generate_project_blueprint_pdf(
                     block_elements.append(Spacer(1, 3))
 
                 if assumptions:
-                    assump_text = "<br/>".join([f"• {a}" for a in assumptions])
+                    assump_text = "<br/>".join([f"• {_escape_pdf(a)}" for a in assumptions])
                     block_elements.append(Paragraph(f"<b>Key Assumptions:</b><br/>{assump_text}", body_style))
                     block_elements.append(Spacer(1, 3))
 
                 if experiments:
-                    exp_text = "<br/>".join([f"• {e}" for e in experiments])
+                    exp_text = "<br/>".join([f"• {_escape_pdf(e)}" for e in experiments])
                     block_elements.append(Paragraph(f"<b>Validation Experiments:</b><br/>{exp_text}", body_style))
 
                 block_elements.append(Spacer(1, 8))
@@ -265,10 +279,10 @@ def generate_project_blueprint_pdf(
         tech_data = tech_blueprint.content_json
 
         if "architecture_summary" in tech_data:
-            elements.append(Paragraph(f"<b>Architecture Philosophy:</b> {tech_data['architecture_summary']}", body_style))
+            elements.append(Paragraph(f"<b>Architecture Philosophy:</b> {_escape_pdf(tech_data['architecture_summary'])}", body_style))
             elements.append(Spacer(1, 4))
         if "estimated_monthly_infrastructure_total" in tech_data:
-            elements.append(Paragraph(f"<b>Estimated Launch Infrastructure Cost:</b> {tech_data['estimated_monthly_infrastructure_total']}", body_style))
+            elements.append(Paragraph(f"<b>Estimated Launch Infrastructure Cost:</b> {_escape_pdf(tech_data['estimated_monthly_infrastructure_total'])}", body_style))
             elements.append(Spacer(1, 10))
 
         cat_order = [
@@ -282,13 +296,13 @@ def generate_project_blueprint_pdf(
         for cat_key, fallback_title in cat_order:
             cat = tech_data.get(cat_key, {})
             if isinstance(cat, dict):
-                tech = cat.get("technology", "N/A")
-                purpose = cat.get("purpose", "")
-                reason = cat.get("reason", "")
-                cost = cat.get("estimated_cost", "Estimate required")
+                tech = _escape_pdf(cat.get("technology", "N/A"))
+                purpose = _escape_pdf(cat.get("purpose", ""))
+                reason = _escape_pdf(cat.get("reason", ""))
+                cost = _escape_pdf(cat.get("estimated_cost", "Estimate required"))
                 alts = cat.get("alternatives", [])
                 tradeoffs = cat.get("tradeoffs", [])
-                notes = cat.get("verification_notes", "")
+                notes = _escape_pdf(cat.get("verification_notes", ""))
 
                 cat_elements = [
                     Paragraph(f"{fallback_title}: {tech}", h2_style),
@@ -301,11 +315,11 @@ def generate_project_blueprint_pdf(
                 ]
 
                 if alts:
-                    cat_elements.append(Paragraph(f"<b>Alternatives Considered:</b> {', '.join(alts)}", body_style))
+                    cat_elements.append(Paragraph(f"<b>Alternatives Considered:</b> {', '.join([_escape_pdf(a) for a in alts])}", body_style))
                     cat_elements.append(Spacer(1, 2))
 
                 if tradeoffs:
-                    t_text = "<br/>".join([f"• {t}" for t in tradeoffs])
+                    t_text = "<br/>".join([f"• {_escape_pdf(t)}" for t in tradeoffs])
                     cat_elements.append(Paragraph(f"<b>Trade-offs & Operational Considerations:</b><br/>{t_text}", body_style))
                     cat_elements.append(Spacer(1, 2))
 
@@ -325,26 +339,26 @@ def generate_project_blueprint_pdf(
         elements.append(Paragraph(f"4. AI Idea Validation & Risk Interrogation (Version {val_ver})", h1_style))
 
         if "overview" in val_data:
-            elements.append(Paragraph(f"<b>Validation Synthesis:</b> {val_data['overview']}", body_style))
+            elements.append(Paragraph(f"<b>Validation Synthesis:</b> {_escape_pdf(val_data['overview'])}", body_style))
             elements.append(Spacer(1, 6))
 
         # Problem-Solution Fit
         ps_fit = val_data.get("problem_solution_fit", {})
         if ps_fit:
             elements.append(Paragraph("Problem–Solution Fit", h2_style))
-            elements.append(Paragraph(f"<b>Problem Statement:</b> {ps_fit.get('problem_statement', 'N/A')}", body_style))
-            elements.append(Paragraph(f"<b>Who Experiences It:</b> {ps_fit.get('who_experiences_it', 'N/A')}", body_style))
-            elements.append(Paragraph(f"<b>Severity & Frequency:</b> {ps_fit.get('frequency_and_severity', 'N/A')}", body_style))
+            elements.append(Paragraph(f"<b>Problem Statement:</b> {_escape_pdf(ps_fit.get('problem_statement', 'N/A'))}", body_style))
+            elements.append(Paragraph(f"<b>Who Experiences It:</b> {_escape_pdf(ps_fit.get('who_experiences_it', 'N/A'))}", body_style))
+            elements.append(Paragraph(f"<b>Severity & Frequency:</b> {_escape_pdf(ps_fit.get('frequency_and_severity', 'N/A'))}", body_style))
             elements.append(Spacer(1, 6))
 
         # SWOT Analysis Table
         swot = val_data.get("swot_analysis", {})
         if swot:
             elements.append(Paragraph("SWOT Strategic Matrix", h2_style))
-            s_text = "<br/>".join([f"• {x}" for x in swot.get("strengths", [])]) or "None noted"
-            w_text = "<br/>".join([f"• {x}" for x in swot.get("weaknesses", [])]) or "None noted"
-            o_text = "<br/>".join([f"• {x}" for x in swot.get("opportunities", [])]) or "None noted"
-            t_text = "<br/>".join([f"• {x}" for x in swot.get("threats", [])]) or "None noted"
+            s_text = "<br/>".join([f"• {_escape_pdf(x)}" for x in swot.get("strengths", [])]) or "None noted"
+            w_text = "<br/>".join([f"• {_escape_pdf(x)}" for x in swot.get("weaknesses", [])]) or "None noted"
+            o_text = "<br/>".join([f"• {_escape_pdf(x)}" for x in swot.get("opportunities", [])]) or "None noted"
+            t_text = "<br/>".join([f"• {_escape_pdf(x)}" for x in swot.get("threats", [])]) or "None noted"
 
             swot_table_data = [
                 [Paragraph("<b>STRENGTHS (Internal)</b>", meta_label), Paragraph("<b>WEAKNESSES (Internal)</b>", meta_label)],
@@ -378,12 +392,12 @@ def generate_project_blueprint_pdf(
                 ]
             ]
             for r in risks[:5]:
-                cat = r.get("category", "General")
-                desc = r.get("description", "")
-                lik = r.get("likelihood", "Med")
-                imp = r.get("impact", "Med")
-                mit = r.get("suggested_mitigation", "")
-                act = r.get("recommended_next_action", "")
+                cat = _escape_pdf(r.get("category", "General"))
+                desc = _escape_pdf(r.get("description", ""))
+                lik = _escape_pdf(r.get("likelihood", "Med"))
+                imp = _escape_pdf(r.get("impact", "Med"))
+                mit = _escape_pdf(r.get("suggested_mitigation", ""))
+                act = _escape_pdf(r.get("recommended_next_action", ""))
                 risk_rows.append([
                     Paragraph(f"<b>[{cat}]</b><br/>{desc}", body_style),
                     Paragraph(f"L: {lik}<br/>I: {imp}", body_style),
@@ -406,11 +420,11 @@ def generate_project_blueprint_pdf(
         if experiments:
             elements.append(Paragraph("Actionable Validation Experiments", h2_style))
             for exp in experiments[:3]:
-                name = exp.get("experiment_name", "Experiment")
-                hypo = exp.get("hypothesis", "")
-                proc = exp.get("procedure", "")
-                crit = exp.get("success_criteria", "")
-                dur = exp.get("estimated_duration", "1 week")
+                name = _escape_pdf(exp.get("experiment_name", "Experiment"))
+                hypo = _escape_pdf(exp.get("hypothesis", ""))
+                proc = _escape_pdf(exp.get("procedure", ""))
+                crit = _escape_pdf(exp.get("success_criteria", ""))
+                dur = _escape_pdf(exp.get("estimated_duration", "1 week"))
                 elements.append(Paragraph(f"<b>• {name}</b> ({dur})<br/><b>Hypothesis:</b> {hypo}<br/><b>Procedure:</b> {proc}<br/><b>Success Criteria:</b> {crit}", body_style))
                 elements.append(Spacer(1, 3))
 
@@ -424,7 +438,7 @@ def generate_project_blueprint_pdf(
         elements.append(Paragraph(f"5. Market & Competitor Intelligence (Version {res_ver})", h1_style))
 
         if "executive_summary" in r_data:
-            elements.append(Paragraph(f"<b>Executive Market Overview:</b> {r_data['executive_summary']}", body_style))
+            elements.append(Paragraph(f"<b>Executive Market Overview:</b> {_escape_pdf(r_data['executive_summary'])}", body_style))
             elements.append(Spacer(1, 6))
 
         # Trends
@@ -432,9 +446,9 @@ def generate_project_blueprint_pdf(
         if trends:
             elements.append(Paragraph("Key Industry Trends & Signals", h2_style))
             for tr in trends[:3]:
-                title = tr.get("trend_title", "Trend")
-                desc = tr.get("description", "")
-                imp = tr.get("implications_for_founder", "")
+                title = _escape_pdf(tr.get("trend_title", "Trend"))
+                desc = _escape_pdf(tr.get("description", ""))
+                imp = _escape_pdf(tr.get("implications_for_founder", ""))
                 elements.append(Paragraph(f"<b>• {title}:</b> {desc}<br/><i>Implication:</i> {imp}", body_style))
                 elements.append(Spacer(1, 3))
             elements.append(Spacer(1, 6))
@@ -452,11 +466,11 @@ def generate_project_blueprint_pdf(
                 ]
             ]
             for c in competitors[:5]:
-                c_name = c.get("name", "Competitor")
-                c_site = c.get("website", "")
-                c_price = c.get("estimated_pricing", "Unknown")
-                c_feats = ", ".join(c.get("key_features", [])[:3])
-                c_diff = ", ".join(c.get("differentiators", [])[:2])
+                c_name = _escape_pdf(c.get("name", "Competitor"))
+                c_site = _escape_pdf(c.get("website", ""))
+                c_price = _escape_pdf(c.get("estimated_pricing", "Unknown"))
+                c_feats = ", ".join([_escape_pdf(f) for f in c.get("key_features", [])[:3]])
+                c_diff = ", ".join([_escape_pdf(d) for d in c.get("differentiators", [])[:2]])
                 comp_rows.append([
                     Paragraph(f"<b>{c_name}</b><br/><i>{c_site}</i>", body_style),
                     Paragraph(c_price, body_style),
@@ -495,12 +509,12 @@ def generate_project_blueprint_pdf(
             ]
         ]
         for t in roadmap_tasks[:12]:
-            t_key = getattr(t, "task_key", "TSK")
-            t_m = getattr(t, "milestone", "30-day")
-            t_tit = getattr(t, "title", "Task")
-            t_prio = getattr(t, "priority", "medium")
-            t_stat = getattr(t, "status", "pending")
-            t_del = getattr(t, "deliverable", "")
+            t_key = _escape_pdf(getattr(t, "task_key", "TSK"))
+            t_m = _escape_pdf(getattr(t, "milestone", "30-day"))
+            t_tit = _escape_pdf(getattr(t, "title", "Task"))
+            t_prio = _escape_pdf(getattr(t, "priority", "medium"))
+            t_stat = _escape_pdf(getattr(t, "status", "pending"))
+            t_del = _escape_pdf(getattr(t, "deliverable", ""))
             task_rows.append([
                 Paragraph(t_key, body_style),
                 Paragraph(t_m, body_style),

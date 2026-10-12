@@ -5,6 +5,7 @@ from typing import Optional, Tuple
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.core.exceptions import ConflictError, RateLimitExceededError, UnauthorizedError, ValidationError
 from app.core.rate_limiting import login_rate_limiter, registration_rate_limiter
 from app.core.security import generate_csrf_token, hash_password, validate_password_strength, verify_password
@@ -21,8 +22,9 @@ def register_user(db: Session, request: UserRegisterRequest, client_ip: str = "1
 
     Returns (user, session_token, csrf_token).
     """
-    # Registration abuse rate check
-    limited, retry_after = registration_rate_limiter.is_rate_limited(client_ip, max_attempts=10, window_seconds=3600)
+    # Registration abuse rate check with bounded key
+    rate_key = f"reg:{client_ip}"
+    limited, retry_after = registration_rate_limiter.is_rate_limited(rate_key, max_attempts=10, window_seconds=3600, db=db)
     if limited:
         raise RateLimitExceededError("Too many registration attempts. Please try again later.", retry_after=retry_after)
 
@@ -31,15 +33,17 @@ def register_user(db: Session, request: UserRegisterRequest, client_ip: str = "1
     if not valid:
         raise ValidationError(msg)
 
-    # Check username uniqueness
-    existing_username = db.execute(select(User).where(User.username == request.username)).scalar_one_or_none()
-    if existing_username:
-        raise ConflictError("This username is already taken. Please choose another.")
-
-    # Check email uniqueness
-    existing_email = db.execute(select(User).where(User.email == request.email)).scalar_one_or_none()
-    if existing_email:
-        raise ConflictError("An account with this email address already exists.")
+    # Check username or email uniqueness with a unified error to avoid enumeration
+    existing_user = db.execute(
+        select(User).where(
+            or_(
+                User.username == request.username,
+                User.email == request.email,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing_user:
+        raise ConflictError("Username or email is already taken. Please choose different details or sign in.")
 
     hashed = hash_password(request.password)
     user = User(
@@ -79,12 +83,19 @@ def authenticate_user(
     request: UserLoginRequest,
     client_ip: str = "127.0.0.1",
 ) -> Tuple[User, str, str]:
-    """Authenticate credentials against database with rate limiting.
+    """Authenticate credentials against database with rate limiting configured from settings.
 
     Returns (user, session_token, csrf_token).
     """
-    rate_key = f"{client_ip}:{request.username_or_email}"
-    limited, retry_after = login_rate_limiter.is_rate_limited(rate_key, max_attempts=5, window_seconds=300)
+    settings = get_settings()
+    normalized_identifier = request.username_or_email.strip().lower()[:100]
+    rate_key = f"login:{client_ip}:{normalized_identifier}"
+    limited, retry_after = login_rate_limiter.is_rate_limited(
+        rate_key,
+        max_attempts=settings.login_rate_limit_max_attempts,
+        window_seconds=settings.login_rate_limit_window_seconds,
+        db=db,
+    )
     if limited:
         raise RateLimitExceededError(
             "Too many failed login attempts. Please wait before trying again.",
@@ -107,7 +118,8 @@ def authenticate_user(
         raise UnauthorizedError("This account has been deactivated.")
 
     # Reset rate limit tracker on successful authentication
-    login_rate_limiter.reset(rate_key)
+    login_rate_limiter.reset(rate_key, db=db)
+
 
     # Update last login timestamp
     user.last_login_at = datetime.now(timezone.utc)

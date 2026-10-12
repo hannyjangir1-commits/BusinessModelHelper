@@ -153,6 +153,16 @@ def test_copilot_propose_edit_and_accept_api(client):
     copilot_service.GeminiAIClient = MockAIClient
 
     try:
+        # Generate BMC blueprint first using mock AI client
+        from app.services.ai import generation
+        orig_gen_client = generation.GeminiAIClient
+        generation.GeminiAIClient = MockAIClient
+        try:
+            bmc_gen = client.post(f"/api/projects/{proj_id}/business-model/generate")
+            assert bmc_gen.status_code == 201
+        finally:
+            generation.GeminiAIClient = orig_gen_client
+
         chat_res = client.post(
             f"/api/projects/{proj_id}/copilot/chat",
             json={
@@ -163,7 +173,9 @@ def test_copilot_propose_edit_and_accept_api(client):
             },
         )
         assert chat_res.status_code == 200
-        proposal_id = chat_res.json()["data"]["proposal"]["proposal_id"]
+        prop_data = chat_res.json()["data"]["proposal"]
+        proposal_id = prop_data["proposal_id"]
+        proposed_content = prop_data["proposed_content"]
 
         # Accept proposal
         acc_res = client.post(f"/api/projects/{proj_id}/copilot/proposals/{proposal_id}/accept")
@@ -177,6 +189,69 @@ def test_copilot_propose_edit_and_accept_api(client):
         assert len(revisions) == 1
         assert revisions[0]["status"] == "accepted"
 
+        # Assert resulting blueprint content was actually updated in persistent store
+        bp_res = client.get(f"/api/projects/{proj_id}/business-model")
+        assert bp_res.status_code == 200
+        bp_data = bp_res.json()["data"]
+        assert bp_data["content_json"]["customer_segments"] == proposed_content
+
+    finally:
+        copilot_service.GeminiAIClient = orig_client
+
+
+def test_copilot_accept_missing_blueprint_fails(client):
+    """Test that accepting a proposal fails with 404 if target blueprint does not exist, and proposal remains pending."""
+    # Register & Login
+    client.post(
+        "/api/auth/register",
+        json={
+            "username": "copilot_user4",
+            "email": "copilot4@example.com",
+            "password": "Password123!",
+            "confirm_password": "Password123!",
+            "display_name": "Copilot User 4",
+            "terms_accepted": True,
+            "privacy_acknowledged": True,
+        },
+    )
+
+    proj_res = client.post(
+        "/api/projects",
+        json={
+            "name": "No Blueprint Project",
+            "idea_description": "Project without generated blueprint.",
+            "industry": "DevTools",
+            "business_stage": "idea",
+        },
+    )
+    proj_id = proj_res.json()["data"]["id"]
+
+    orig_client = copilot_service.GeminiAIClient
+    copilot_service.GeminiAIClient = MockAIClient
+
+    try:
+        chat_res = client.post(
+            f"/api/projects/{proj_id}/copilot/chat",
+            json={
+                "query": "Suggest customer segments",
+                "action_type": "propose_edit",
+                "target_module": "business_model",
+                "target_section": "customer_segments",
+            },
+        )
+        assert chat_res.status_code == 200
+        proposal_id = chat_res.json()["data"]["proposal"]["proposal_id"]
+
+        # Accept proposal should fail because blueprint does not exist
+        acc_res = client.post(f"/api/projects/{proj_id}/copilot/proposals/{proposal_id}/accept")
+        assert acc_res.status_code == 404
+
+        # Proposal status must remain pending
+        hist_res = client.get(f"/api/projects/{proj_id}/copilot/proposals")
+        assert hist_res.status_code == 200
+        revisions = hist_res.json()["data"]
+        assert len(revisions) == 1
+        assert revisions[0]["status"] == "pending"
     finally:
         copilot_service.GeminiAIClient = orig_client
 

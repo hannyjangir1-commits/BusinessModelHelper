@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mail, MessageSquare, ShieldCheck, Terminal } from 'lucide-react';
+import { Mail, ShieldCheck, Terminal } from 'lucide-react';
 import { Card, CardContent } from '../../components/ui/Card';
 
 export const ContactPage: React.FC = () => {

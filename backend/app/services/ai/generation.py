@@ -16,6 +16,7 @@ from app.services.ai.business_rules import evaluate_bmc_rules, evaluate_tech_sta
 from app.services.ai.client import GeminiAIClient
 from app.services.ai.prompts import PROMPT_VERSION, build_bmc_prompt, build_tech_stack_prompt
 from app.services.ai.validation import validate_bmc_response, validate_tech_stack_response
+from app.services.project_service import save_blueprint_version
 
 logger = logging.getLogger(__name__)
 
@@ -58,23 +59,13 @@ def generate_business_model_canvas(
         # 4. Apply deterministic business rules
         validated_data, warnings = evaluate_bmc_rules(validated_data, project)
 
-        # 5. Determine next version number
-        latest_version = db.execute(
-            select(func.coalesce(func.max(Blueprint.version), 0)).where(
-                Blueprint.project_id == project.id,
-                Blueprint.module_type == "business_model",
-            )
-        ).scalar_one()
-        new_version = latest_version + 1
-
-        # 6. Save persistent blueprint
-        blueprint = Blueprint(
+        # 5. Save persistent blueprint safely handling concurrency
+        blueprint = save_blueprint_version(
+            db=db,
             project_id=project.id,
             module_type="business_model",
-            version=new_version,
             content_json=validated_data.model_dump(),
         )
-        db.add(blueprint)
 
         # 7. Complete audit run record
         db.execute(
@@ -164,23 +155,13 @@ def generate_technology_stack(
         # 4. Apply deterministic business rules
         validated_data, warnings = evaluate_tech_stack_rules(validated_data, project)
 
-        # 5. Determine next version number
-        latest_version = db.execute(
-            select(func.coalesce(func.max(Blueprint.version), 0)).where(
-                Blueprint.project_id == project.id,
-                Blueprint.module_type == "technology_stack",
-            )
-        ).scalar_one()
-        new_version = latest_version + 1
-
-        # 6. Save persistent blueprint
-        blueprint = Blueprint(
+        # 5. Save persistent blueprint safely handling concurrency
+        blueprint = save_blueprint_version(
+            db=db,
             project_id=project.id,
             module_type="technology_stack",
-            version=new_version,
             content_json=validated_data.model_dump(),
         )
-        db.add(blueprint)
 
         # 7. Complete audit run record
         db.execute(

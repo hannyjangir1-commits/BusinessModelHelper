@@ -4,6 +4,7 @@ import logging
 import random
 import time
 from typing import Any, Dict, Optional, Tuple
+import httpx
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
@@ -22,14 +23,20 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiAIClient:
-    """Official Google GenAI SDK client wrapper."""
+    """Official Google GenAI SDK client wrapper with strict timeout budgets."""
 
-    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        timeout: Optional[float] = None,
+        max_retries: Optional[int] = None,
+    ) -> None:
         settings = get_settings()
         self.api_key = api_key if api_key is not None else settings.gemini_api_key
         self.model = model if model is not None else settings.gemini_model
-        self.timeout = settings.ai_request_timeout_seconds
-        self.max_retries = settings.ai_max_retries
+        self.timeout = float(timeout if timeout is not None else settings.ai_request_timeout_seconds)
+        self.max_retries = int(max_retries if max_retries is not None else settings.ai_max_retries)
         self._client: Optional[genai.Client] = None
 
     def _get_client(self) -> genai.Client:
@@ -38,7 +45,9 @@ class GeminiAIClient:
                 "Gemini API key is not configured. Please set the GEMINI_API_KEY environment variable."
             )
         if self._client is None:
-            self._client = genai.Client(api_key=self.api_key)
+            timeout_ms = max(1, int(self.timeout * 1000)) if self.timeout else None
+            http_options = types.HttpOptions(timeout=timeout_ms) if timeout_ms else None
+            self._client = genai.Client(api_key=self.api_key, http_options=http_options)
         return self._client
 
     def generate(
@@ -47,7 +56,7 @@ class GeminiAIClient:
         user_prompt: str,
         response_mime_type: Optional[str] = "application/json",
     ) -> Tuple[str, int, Optional[int], Optional[int]]:
-        """Invoke Gemini model with exponential backoff and return (raw_text, latency_ms, input_tokens, output_tokens)."""
+        """Invoke Gemini model with bounded retries and overall timeout budget."""
         client = self._get_client()
 
         config_kwargs: Dict[str, Any] = {
@@ -58,13 +67,26 @@ class GeminiAIClient:
         if response_mime_type:
             config_kwargs["response_mime_type"] = response_mime_type
 
-        config = types.GenerateContentConfig(**config_kwargs)
+        total_budget_seconds = float(self.timeout) if self.timeout else 60.0
+        overall_start = time.perf_counter()
 
         attempts = 0
         last_error: Optional[Exception] = None
 
         while attempts <= self.max_retries:
+            elapsed_total = time.perf_counter() - overall_start
+            remaining_total = total_budget_seconds - elapsed_total
+            if remaining_total <= 0:
+                raise AITimeoutError(
+                    f"AI provider request timed out: total budget of {self.timeout}s exceeded across {attempts} attempt(s)."
+                )
+
             attempts += 1
+            # Bound per-attempt provider timeout to remaining time budget
+            attempt_timeout_ms = max(100, int(remaining_total * 1000))
+            config_kwargs["http_options"] = types.HttpOptions(timeout=attempt_timeout_ms)
+            config = types.GenerateContentConfig(**config_kwargs)
+
             start_time = time.perf_counter()
             try:
                 response = client.models.generate_content(
@@ -95,6 +117,24 @@ class GeminiAIClient:
                 )
                 return raw_text, latency_ms, input_tokens, output_tokens
 
+            except (httpx.TimeoutException, TimeoutError) as e:
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                last_error = AITimeoutError(f"AI provider request timed out ({latency_ms}ms): {str(e)}")
+                elapsed_after = time.perf_counter() - overall_start
+                remaining = total_budget_seconds - elapsed_after
+                if attempts > self.max_retries or remaining <= 0:
+                    raise last_error
+
+                backoff = (2 ** attempts) + random.uniform(0.1, 0.5)
+                if remaining <= backoff:
+                    raise AITimeoutError(
+                        f"AI provider request timed out: remaining budget of {remaining:.2f}s is insufficient for retry backoff ({backoff:.2f}s)."
+                    )
+                logger.warning(
+                    f"Transient AI timeout on attempt {attempts}/{self.max_retries}: {str(e)}. Retrying in {backoff:.2f}s..."
+                )
+                time.sleep(backoff)
+
             except APIError as e:
                 latency_ms = int((time.perf_counter() - start_time) * 1000)
                 status_code = getattr(e, "code", 500)
@@ -116,30 +156,61 @@ class GeminiAIClient:
                         "AI provider quota exhausted or free-tier rate limit reached. Please check your Gemini API billing/quota or retry in a short while."
                     )
 
-                # Rate limit
-                if status_code == 429 or "rate" in error_msg:
+                # Timeout / deadline exceeded
+                if (
+                    status_code in (408, 504)
+                    or "deadline" in error_msg
+                    or "timed out" in error_msg
+                    or "timeout" in error_msg
+                ):
+                    last_error = AITimeoutError(f"Transient AI provider timeout ({status_code}): {str(e)}")
+                elif status_code == 429 or "rate" in error_msg:
                     last_error = AIRateLimitError("AI rate limit encountered.")
-                elif status_code in (500, 502, 503, 504):
+                elif status_code in (500, 502, 503):
                     last_error = AITimeoutError(f"Transient AI provider error ({status_code}).")
                 else:
                     last_error = e
 
-                if attempts > self.max_retries:
+                elapsed_after = time.perf_counter() - overall_start
+                remaining = total_budget_seconds - elapsed_after
+                if attempts > self.max_retries or remaining <= 0:
+                    if isinstance(last_error, AITimeoutError):
+                        raise last_error
                     break
 
-                # Exponential backoff with jitter
                 backoff = (2 ** attempts) + random.uniform(0.1, 0.5)
+                if remaining <= backoff:
+                    if isinstance(last_error, AITimeoutError):
+                        raise last_error
+                    raise AITimeoutError(
+                        f"AI provider request timed out: total budget of {self.timeout}s exceeded before retry backoff ({backoff:.2f}s)."
+                    )
                 logger.warning(
                     f"Transient AI error on attempt {attempts}/{self.max_retries}: {str(e)}. Retrying in {backoff:.2f}s..."
                 )
                 time.sleep(backoff)
 
             except Exception as e:
-                # General network or timeout error
-                last_error = e
-                if attempts > self.max_retries:
+                # General network or unexpected error
+                if isinstance(e, (httpx.TimeoutException, TimeoutError)):
+                    last_error = AITimeoutError(f"AI provider request timed out: {str(e)}")
+                else:
+                    last_error = e
+
+                elapsed_after = time.perf_counter() - overall_start
+                remaining = total_budget_seconds - elapsed_after
+                if attempts > self.max_retries or remaining <= 0:
+                    if isinstance(last_error, AITimeoutError):
+                        raise last_error
                     break
+
                 backoff = (2 ** attempts) + random.uniform(0.1, 0.5)
+                if remaining <= backoff:
+                    if isinstance(last_error, AITimeoutError):
+                        raise last_error
+                    raise AITimeoutError(
+                        f"AI provider request timed out: total budget of {self.timeout}s exceeded before retry backoff ({backoff:.2f}s)."
+                    )
                 time.sleep(backoff)
 
         raise AIRetryExhaustedError(
@@ -705,7 +776,7 @@ class MockAIClient:
   "hosting_infrastructure": {
     "category": "Hosting & Infrastructure",
     "technology": "Docker on Render Web Services",
-    "purpose": "Multi-stage container execution, automated zero-downtime deployments, and SSL management.",
+    "purpose": "Multi-stage container execution, automated rolling deployments, and SSL management.",
     "reason": "Single unified origin avoiding CORS issues, simple git push deployments, and built-in health checks.",
     "alternatives": ["Railway", "Fly.io", "AWS ECS / App Runner"],
     "tradeoffs": ["Cold starts on free tiers; starter paid plan recommended for production."],

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowRight, Layers, Lock } from 'lucide-react';
+import { ArrowRight, Layers } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent } from '../../components/ui/Card';

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, KeyRound, ShieldAlert, User, UserX } from 'lucide-react';
+import { Check, KeyRound, ShieldAlert, UserX } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { Button } from '../components/ui/Button';
@@ -102,7 +102,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
         password: deletePassword,
         confirmation_text: deleteConfirmText,
       });
-      await logout();
+      await logout(true);
       onNavigate('/');
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to delete account. Please verify password.');
@@ -205,6 +205,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
             <CardContent className="p-6">
               <form onSubmit={handleChangePassword} className="space-y-4">
                 <Input
+                  id="change-password-current"
                   label="Current Password"
                   type="password"
                   placeholder="Enter current password"
@@ -316,6 +317,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onNavigate }) => {
           </p>
 
           <Input
+            id="delete-account-password"
             label="Current Password"
             type="password"
             placeholder="Confirm your password"
