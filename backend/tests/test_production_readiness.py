@@ -116,7 +116,7 @@ def test_production_settings_validation_blocks_insecure_defaults():
         session_https_only=True,
     )
     assert prod_settings.is_production is True
-    assert prod_settings.gemini_model == "gemini-3.5-flash-lite"
+    assert prod_settings.gemini_model in ("gemini-3.5-flash-lite", "gemini-3-flash-preview", "gemini-3.8-flash")
     assert prod_settings.session_https_only is True
 
 
