@@ -408,11 +408,11 @@ export interface RegisterPayload {
   username: string;
   email: string;
   password: string;
-  confirm_password?: string;
-  display_name?: string;
+  confirm_password: string;
   terms_accepted: boolean;
+  privacy_acknowledged: boolean;
   privacy_accepted?: boolean;
-  privacy_acknowledged?: boolean;
+  display_name?: string;
   agreements_version?: string;
 }
 

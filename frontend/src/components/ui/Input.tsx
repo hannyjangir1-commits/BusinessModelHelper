@@ -29,6 +29,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             type={computedType}
             aria-invalid={Boolean(error)}
+            aria-describedby={
+              error ? `${inputId}-error` : helperText ? `${inputId}-helper` : props['aria-describedby']
+            }
             className={`w-full px-3.5 py-2 text-sm bg-white border rounded-lg transition-colors focus:outline-hidden focus:ring-2 focus:border-transparent ${
               error
                 ? 'border-rose-400 focus:ring-rose-400 text-rose-900 placeholder-rose-300'
@@ -47,8 +50,16 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             </button>
           )}
         </div>
-        {error && <p className="mt-1.5 text-xs text-rose-600 font-medium">{error}</p>}
-        {helperText && !error && <p className="mt-1.5 text-xs text-slate-500">{helperText}</p>}
+        {error && (
+          <p id={`${inputId}-error`} role="alert" className="mt-1.5 text-xs text-rose-600 font-medium">
+            {error}
+          </p>
+        )}
+        {helperText && !error && (
+          <p id={`${inputId}-helper`} className="mt-1.5 text-xs text-slate-500">
+            {helperText}
+          </p>
+        )}
       </div>
     );
   }

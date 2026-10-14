@@ -2,17 +2,31 @@
 
 import re
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class UserRegisterRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     username: str = Field(..., min_length=3, max_length=30, description="Alphanumeric username with underscores or hyphens")
     email: str = Field(..., min_length=5, max_length=255, description="Valid email address")
     password: str = Field(..., min_length=8, max_length=128, description="Strong password")
     confirm_password: str = Field(..., min_length=8, max_length=128)
     terms_accepted: bool = Field(..., description="Must explicitly accept Terms and Conditions")
-    privacy_acknowledged: bool = Field(..., description="Must explicitly acknowledge Privacy Policy")
+    privacy_acknowledged: bool = Field(default=False, description="Must explicitly acknowledge Privacy Policy")
+    privacy_accepted: Optional[bool] = Field(default=None, description="Alternative alias for privacy_acknowledged")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legal_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            # If privacy_accepted was provided instead of privacy_acknowledged, map it
+            if "privacy_acknowledged" not in data and "privacy_accepted" in data:
+                data["privacy_acknowledged"] = data["privacy_accepted"]
+            elif "privacy_accepted" not in data and "privacy_acknowledged" in data:
+                data["privacy_accepted"] = data["privacy_acknowledged"]
+        return data
 
     @field_validator("username")
     @classmethod
@@ -34,10 +48,16 @@ class UserRegisterRequest(BaseModel):
     def validate_passwords_and_legal(self) -> "UserRegisterRequest":
         if self.password != self.confirm_password:
             raise ValueError("Passwords do not match.")
+        from app.core.security import validate_password_strength
+        valid, msg = validate_password_strength(self.password)
+        if not valid:
+            raise ValueError(msg)
         if not self.terms_accepted:
             raise ValueError("You must accept the Terms and Conditions to register.")
-        if not self.privacy_acknowledged:
+        acknowledged = self.privacy_acknowledged or getattr(self, "privacy_accepted", False)
+        if not acknowledged:
             raise ValueError("You must acknowledge the Privacy Policy to register.")
+        self.privacy_acknowledged = True
         return self
 
 

@@ -54,24 +54,33 @@ def register_user(db: Session, request: UserRegisterRequest, client_ip: str = "1
         preferred_currency="USD",
         is_active=True,
     )
-    db.add(user)
-    db.flush()  # populate user.id
+    from sqlalchemy.exc import IntegrityError
 
-    # Record mandatory legal acceptances
-    terms_acceptance = LegalAcceptance(
-        user_id=user.id,
-        document_type="terms_and_conditions",
-        document_version=LEGAL_DOC_VERSION,
-    )
-    privacy_acceptance = LegalAcceptance(
-        user_id=user.id,
-        document_type="privacy_policy",
-        document_version=LEGAL_DOC_VERSION,
-    )
-    db.add(terms_acceptance)
-    db.add(privacy_acceptance)
-    db.commit()
-    db.refresh(user)
+    try:
+        db.add(user)
+        db.flush()  # populate user.id
+
+        # Record mandatory legal acceptances
+        terms_acceptance = LegalAcceptance(
+            user_id=user.id,
+            document_type="terms_and_conditions",
+            document_version=LEGAL_DOC_VERSION,
+        )
+        privacy_acceptance = LegalAcceptance(
+            user_id=user.id,
+            document_type="privacy_policy",
+            document_version=LEGAL_DOC_VERSION,
+        )
+        db.add(terms_acceptance)
+        db.add(privacy_acceptance)
+        db.commit()
+        db.refresh(user)
+    except IntegrityError:
+        db.rollback()
+        raise ConflictError("Username or email is already taken. Please choose different details or sign in.")
+    except Exception:
+        db.rollback()
+        raise
 
     csrf_token = generate_csrf_token()
     session_token = create_session_token(user.id, csrf_token=csrf_token)

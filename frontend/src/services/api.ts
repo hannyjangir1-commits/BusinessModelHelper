@@ -140,9 +140,14 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 export const api = {
   auth: {
     async register(data: RegisterPayload, options?: RequestOptions): Promise<{ user: User; csrf_token: string }> {
+      const payload: RegisterPayload = {
+        ...data,
+        privacy_acknowledged: Boolean(data.privacy_acknowledged ?? data.privacy_accepted),
+        privacy_accepted: Boolean(data.privacy_accepted ?? data.privacy_acknowledged),
+      };
       const res = await request<ApiResponse<{ user: User; csrf_token: string }>>('/api/auth/register', {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
         signal: options?.signal,
       });
       if (res.data?.csrf_token) {

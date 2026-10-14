@@ -95,3 +95,62 @@ def test_profile_update_and_account_deletion(client):
     # Account no longer accessible
     after_del_me = client.get("/api/auth/me", cookies=cookies)
     assert after_del_me.status_code == 401
+
+
+def test_registration_validation_and_legal_aliases(client):
+    """Test comprehensive edge-cases for user registration validation and error status codes."""
+    base_payload = {
+        "username": "valid_user_1",
+        "email": "valid1@example.com",
+        "password": "ValidPassword123",
+        "confirm_password": "ValidPassword123",
+        "terms_accepted": True,
+        "privacy_acknowledged": True,
+    }
+
+    # 1. Registration with privacy_accepted alias works
+    alias_payload = {
+        "username": "alias_user",
+        "email": "alias@example.com",
+        "password": "ValidPassword123",
+        "confirm_password": "ValidPassword123",
+        "terms_accepted": True,
+        "privacy_accepted": True,
+    }
+    res = client.post("/api/auth/register", json=alias_payload)
+    assert res.status_code == 201
+    assert res.json()["success"] is True
+
+    # 2. Weak password: missing number
+    no_num = {**base_payload, "username": "no_num_user", "email": "nonum@example.com", "password": "NoNumberPassword", "confirm_password": "NoNumberPassword"}
+    res = client.post("/api/auth/register", json=no_num)
+    assert res.status_code == 422
+    assert "number" in str(res.json()["error"])
+
+    # 3. Weak password: missing letter
+    no_let = {**base_payload, "username": "no_let_user", "email": "nolet@example.com", "password": "1234567890!", "confirm_password": "1234567890!"}
+    res = client.post("/api/auth/register", json=no_let)
+    assert res.status_code == 422
+    assert "letter" in str(res.json()["error"])
+
+    # 4. Password mismatch
+    mismatch = {**base_payload, "username": "mismatch_user", "email": "mismatch@example.com", "confirm_password": "DifferentPassword123"}
+    res = client.post("/api/auth/register", json=mismatch)
+    assert res.status_code == 422
+    assert "Passwords do not match" in str(res.json()["error"])
+
+    # 5. Invalid username (contains space)
+    bad_user = {**base_payload, "username": "bad user", "email": "baduser@example.com"}
+    res = client.post("/api/auth/register", json=bad_user)
+    assert res.status_code == 422
+
+    # 6. Invalid email
+    bad_email = {**base_payload, "username": "bad_email_user", "email": "not-an-email"}
+    res = client.post("/api/auth/register", json=bad_email)
+    assert res.status_code == 422
+
+    # 7. Missing privacy acknowledgment
+    no_privacy = {**base_payload, "username": "no_priv_user", "email": "nopriv@example.com", "privacy_acknowledged": False}
+    res = client.post("/api/auth/register", json=no_privacy)
+    assert res.status_code == 422
+
